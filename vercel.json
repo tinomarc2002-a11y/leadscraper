@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
   "regions": ["fra1"],
   "rewrites": [{ "source": "/api/:pfad*", "destination": "/api/index?pfad=:pfad*" }],
   "functions": { "api/index.js": { "maxDuration": 300 } }

@@ -1,0 +1,11 @@
+# Was nicht zu Vercel hochgeladen wird.
+# Lokale Daten (CRM, Suchergebnisse, Zugangsdatei) bleiben auf dem eigenen PC:
+data
+.env*
+.claude
+.git
+
+# Nur für die lokale Version. server.js darf nicht hoch – Vercel würde es sonst als Server starten
+# und die Online-Schnittstelle in api/index.js übergehen.
+server.js
+start.bat
