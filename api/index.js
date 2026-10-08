@@ -1,6 +1,6 @@
 // Leadscraper auf Vercel. Dort gibt es keinen dauerhaft laufenden Server: jede Anfrage startet diese Funktion neu.
 // Deshalb steuert der Browser die Suche in Etappen (/api/kandidaten, dann /api/pruefen in kleinen Paketen),
-// und CRM sowie Einstellungen liegen im privaten Vercel-Speicher. Jede Anfrage braucht das Zugangspasswort.
+// und CRM sowie Einstellungen liegen im privaten Vercel-Speicher. Ist LEADSCRAPER_PASSWORT gesetzt, braucht jede Anfrage dieses Passwort.
 const crypto = require('crypto');
 const BRANCHEN = require('../lib/branchen');
 const { geocode, sucheUnternehmen } = require('../lib/osm');
@@ -14,7 +14,9 @@ const MAX_BRANCHEN_JE_ABRUF = 3;
 
 function passwortStimmt(req) {
   const soll = process.env.LEADSCRAPER_PASSWORT;
-  if (!soll) return false; // ohne gesetztes Passwort bleibt die Anwendung zu
+  // Ohne gesetztes Passwort ist die Anwendung offen: jeder mit dem Link kann suchen und das CRM sehen.
+  // Zum Schützen in Vercel die Umgebungsvariable LEADSCRAPER_PASSWORT setzen und neu deployen.
+  if (!soll) return true;
   const hash = (s) => crypto.createHash('sha256').update(String(s)).digest();
   let eingabe = '';
   try { eingabe = decodeURIComponent(req.headers['x-leadscraper-passwort'] || ''); } catch {}
@@ -22,7 +24,7 @@ function passwortStimmt(req) {
 }
 
 async function api(pfad, post, k) {
-  if (pfad === '/api/modus') return { modus: 'cloud', register: false };
+  if (pfad === '/api/modus') return { modus: 'cloud', register: false, passwort: !!process.env.LEADSCRAPER_PASSWORT };
   if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe }) => ({ id, label, gruppe }));
 
   // Etappe 1: Unternehmen im Umkreis sammeln – höchstens drei Branchen je Abruf, damit die Laufzeitgrenze sicher hält.

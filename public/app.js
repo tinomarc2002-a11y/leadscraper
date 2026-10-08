@@ -550,7 +550,7 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
 (versuche(async () => {
   MODUS = await api('/api/modus');
   const cloud = MODUS.modus === 'cloud';
-  $('#abmelden').hidden = !cloud;
+  $('#abmelden').hidden = !MODUS.passwort;
   baueLeiste('suche');
   baueLeiste('crm');
   await ladeBranchen();
