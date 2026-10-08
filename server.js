@@ -9,7 +9,7 @@ const { geocode, sucheUnternehmen } = require('./lib/osm');
 const { pruefeLeads, freieSuchen } = require('./lib/register');
 const { sendeAnSheets } = require('./lib/sheets');
 const CRM = require('./lib/crm');
-const { leseParameter, waehleKandidaten, pruefeKandidat } = require('./lib/suchlauf');
+const { leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('./lib/suchlauf');
 
 const PORT = +(process.argv.find((a) => a.startsWith('--port=')) || '').slice(7) || +process.env.PORT || 4310;
 const DATA = path.join(__dirname, 'data');
@@ -33,7 +33,7 @@ async function laufe(j) {
   const p = j.parameter;
   const zentrum = await geocode(p.ort);
   j.zentrum = zentrum.name;
-  const branchen = BRANCHEN.filter((b) => p.branchen.includes(b.id));
+  const branchen = branchenFuer(p.branchen, p.stichworte);
   const kandidaten = await sucheUnternehmen(branchen, zentrum, p.radiusKm, (m) => (j.meldung = m), () => j.abbruch);
   const kennungen = p.ohneCrm ? CRM.kennungen(crm) : new Set();
   const { schlange, ohneWebsite, schonImCrm } = waehleKandidaten(kandidaten, p, kennungen);
@@ -113,7 +113,7 @@ async function api(req, pfad, url) {
   const post = req.method === 'POST';
   const k = post ? await leseKoerper(req) : {};
   if (pfad === '/api/modus') return { modus: 'lokal', register: true };
-  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe }) => ({ id, label, gruppe }));
+  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, suche }) => ({ id, label, gruppe, suche }));
   if (pfad === '/api/suche' && post) return { id: starteSuche(k).id };
   if (pfad === '/api/suche') {
     if (!job) return { leer: true };

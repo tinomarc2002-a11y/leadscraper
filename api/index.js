@@ -7,7 +7,7 @@ const { geocode, sucheUnternehmen } = require('../lib/osm');
 const { sendeAnSheets } = require('../lib/sheets');
 const CRM = require('../lib/crm');
 const speicher = require('../lib/speicher');
-const { leseParameter, waehleKandidaten, pruefeKandidat } = require('../lib/suchlauf');
+const { leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('../lib/suchlauf');
 
 const MAX_JE_PAKET = 10;
 const MAX_BRANCHEN_JE_ABRUF = 3;
@@ -25,14 +25,16 @@ function passwortStimmt(req) {
 
 async function api(pfad, post, k) {
   if (pfad === '/api/modus') return { modus: 'cloud', register: false, passwort: !!process.env.LEADSCRAPER_PASSWORT };
-  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe }) => ({ id, label, gruppe }));
+  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, suche }) => ({ id, label, gruppe, suche }));
 
   // Etappe 1: Unternehmen im Umkreis sammeln – höchstens drei Branchen je Abruf, damit die Laufzeitgrenze sicher hält.
   if (pfad === '/api/kandidaten' && post) {
     const p = leseParameter(k.parameter || {});
-    const ids = (Array.isArray(k.branchen) ? k.branchen : p.branchen).slice(0, MAX_BRANCHEN_JE_ABRUF);
+    // Der Browser schickt je Abruf einen Ausschnitt seiner Auswahl: Katalogbranchen und/oder eigene Stichwörter.
+    const ausschnitt = Array.isArray(k.branchen) || Array.isArray(k.stichworte);
+    const branchen = branchenFuer(ausschnitt ? k.branchen : p.branchen, ausschnitt ? k.stichworte : p.stichworte).slice(0, MAX_BRANCHEN_JE_ABRUF);
     const zentrum = k.zentrum && Number.isFinite(+k.zentrum.lat) && Number.isFinite(+k.zentrum.lon) ? { lat: +k.zentrum.lat, lon: +k.zentrum.lon, name: String(k.zentrum.name || '') } : await geocode(p.ort);
-    const kandidaten = await sucheUnternehmen(BRANCHEN.filter((b) => ids.includes(b.id)), zentrum, p.radiusKm);
+    const kandidaten = await sucheUnternehmen(branchen, zentrum, p.radiusKm);
     const kennungen = p.ohneCrm ? CRM.kennungen(await speicher.lese('crm', [])) : new Set();
     return { zentrum, ...waehleKandidaten(kandidaten, p, kennungen) };
   }

@@ -337,7 +337,7 @@ const formular = $('#suchformular');
 
 function leseFormular() {
   const f = new FormData(formular);
-  return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: f.getAll('branche'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked };
+  return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked };
 }
 
 function zeigeFortschritt(d) {
@@ -345,7 +345,7 @@ function zeigeFortschritt(d) {
   $('#fortschritt').hidden = false;
   $('#start').disabled = laeuft;
   $('#stopp').hidden = !laeuft;
-  $('#fortschritt-titel').textContent = d.fehler ? 'Suche fehlgeschlagen' : laeuft ? 'Suche läuft …' : `${d.gesamt} Leads gefunden`;
+  $('#fortschritt-titel').textContent = d.fehler ? 'Suche fehlgeschlagen' : laeuft ? 'Suche läuft …' : `${d.gesamt} ${d.gesamt === 1 ? 'Lead' : 'Leads'} gefunden`;
   $('#fortschritt-zahlen').textContent = d.kandidaten ? `${d.geprueft} von ${d.kandidaten} Unternehmen geprüft · ${d.gesamt} Treffer` : '';
   const anteil = d.fertig ? 1 : Math.max(d.gesamt / d.parameter.anzahl, d.kandidaten ? d.geprueft / d.kandidaten : 0.02);
   $('#balken-fuellung').style.width = Math.round(Math.min(1, anteil) * 100) + '%';
@@ -396,7 +396,9 @@ function zeigeCloud() {
 }
 
 async function starteCloudSuche(p) {
-  if (!p.branchen.length) throw new Error('Bitte mindestens eine Branche auswählen.');
+  // Katalogbranchen und eigene Stichwörter werden gemeinsam in kleinen Gruppen abgerufen.
+  const einheiten = [...p.branchen.map((id) => ({ branche: id })), ...(p.stichworte || []).map((wort) => ({ wort }))];
+  if (!einheiten.length) throw new Error('Bitte mindestens eine Branche auswählen oder ein eigenes Stichwort eingeben.');
   if (cloudSuche && !cloudSuche.fertig) cloudSuche.abbruch = true;
   const c = (cloudSuche = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0 }, fertig: false, fehler: '', abbruch: false });
   const aktuell = () => cloudSuche === c;
@@ -405,10 +407,11 @@ async function starteCloudSuche(p) {
   try {
     let zentrum = null;
     const alle = new Map();
-    for (let i = 0; i < p.branchen.length && !c.abbruch; i += BRANCHEN_JE_ABRUF) {
-      c.meldung = `Unternehmen werden gesammelt (Branche ${i + 1} bis ${Math.min(i + BRANCHEN_JE_ABRUF, p.branchen.length)} von ${p.branchen.length}) …`;
+    for (let i = 0; i < einheiten.length && !c.abbruch; i += BRANCHEN_JE_ABRUF) {
+      const teil = einheiten.slice(i, i + BRANCHEN_JE_ABRUF);
+      c.meldung = `Unternehmen werden gesammelt (Branche ${i + 1} bis ${i + teil.length} von ${einheiten.length}) …`;
       if (aktuell()) zeigeCloud();
-      const r = await api('/api/kandidaten', { parameter: p, branchen: p.branchen.slice(i, i + BRANCHEN_JE_ABRUF), zentrum });
+      const r = await api('/api/kandidaten', { parameter: p, branchen: teil.filter((e) => e.branche).map((e) => e.branche), stichworte: teil.filter((e) => e.wort).map((e) => e.wort), zentrum });
       zentrum = r.zentrum;
       c.zentrum = zentrum.name;
       c.ohneWebsite += r.ohneWebsite;
@@ -467,9 +470,11 @@ $('#stopp').addEventListener('click', versuche(async () => {
 formular.radiusKm.addEventListener('input', (e) => ($('#radius-wert').textContent = e.target.value));
 $$('a[data-gruppe]').forEach((link) => link.addEventListener('click', (e) => {
   e.preventDefault();
-  const boxen = $$('#branchen-' + link.dataset.gruppe + ' input');
+  // wirkt nur auf die Branchen, die die Suchzeile gerade zeigt
+  const boxen = $$('#branchen-' + link.dataset.gruppe + ' input').filter((b) => !b.parentElement.hidden);
   const alle = boxen.every((b) => b.checked);
   boxen.forEach((b) => (b.checked = !alle));
+  zeigeAuswahlAnzahl();
 }));
 
 async function ladeBranchen() {
@@ -478,7 +483,7 @@ async function ladeBranchen() {
   try { gemerkt = JSON.parse(localStorage.getItem('leadscraper-formular')) || {}; } catch {}
   for (const gruppe of ['hochpreis', 'personal']) {
     $('#branchen-' + gruppe).innerHTML = branchen.filter((b) => b.gruppe === gruppe)
-      .map((b) => `<label><input type="checkbox" name="branche" value="${esc(b.id)}" ${gemerkt.branchen?.includes(b.id) ? 'checked' : ''}><span>${esc(b.label)}</span></label>`).join('');
+      .map((b) => `<label><input type="checkbox" name="branche" value="${esc(b.id)}" data-suche="${esc(b.suche || b.label.toLowerCase())}" ${gemerkt.branchen?.includes(b.id) ? 'checked' : ''}><span>${esc(b.label)}</span></label>`).join('');
   }
   if (gemerkt.ort) formular.ort.value = gemerkt.ort;
   if (gemerkt.radiusKm) { formular.radiusKm.value = gemerkt.radiusKm; $('#radius-wert').textContent = gemerkt.radiusKm; }
@@ -487,7 +492,73 @@ async function ladeBranchen() {
   if (gemerkt.maKlassen) $$('input[name=ma]').forEach((b) => (b.checked = gemerkt.maKlassen.includes(b.value)));
   if (gemerkt.ohneCrm === false) formular.ohneCrm.checked = false;
   if (gemerkt.websiteSuchen) formular.websiteSuchen.checked = true;
+  (gemerkt.stichworte || []).forEach(fuegeStichwortHinzu);
+  zeigeAuswahlAnzahl();
 }
+
+// ───────── Branchen-Suchzeile ─────────
+// Tippen blendet die passenden Katalogbranchen ein. Was der Katalog nicht kennt, lässt sich als eigenes
+// Stichwort aufnehmen – die Suche findet dann Firmen, die dieses Wort im Namen tragen.
+const suchfeld = $('#branchen-suche');
+
+function filtereBranchen() {
+  const worte = suchfeld.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  let treffer = 0;
+  for (const gruppe of ['hochpreis', 'personal']) {
+    const feld = $('#branchen-' + gruppe);
+    let sichtbar = 0;
+    for (const label of feld.children) {
+      const passt = worte.every((w) => label.firstElementChild.dataset.suche.includes(w));
+      label.hidden = !passt;
+      if (passt) sichtbar++;
+    }
+    feld.previousElementSibling.hidden = !sichtbar;
+    treffer += sichtbar;
+  }
+  const eingabe = suchfeld.value.trim().replace(/\s+/g, ' ');
+  const knopf = $('#stichwort-neu');
+  knopf.hidden = eingabe.length < 3;
+  knopf.textContent = `+ „${eingabe}“ als eigenes Stichwort suchen`;
+  const hinweis = $('#branchen-hinweis');
+  hinweis.hidden = treffer > 0;
+  hinweis.textContent = 'Keine passende Branche im Katalog.' + (eingabe.length >= 3 ? ' Als eigenes Stichwort findet die Suche Firmen, die das Wort im Namen tragen.' : '');
+}
+
+function zeigeAuswahlAnzahl() {
+  const n = $$('input[name=branche]:checked, input[name=stichwort]:checked').length;
+  $('#branchen-anzahl').textContent = n ? `${n} ausgewählt` : '';
+}
+
+function fuegeStichwortHinzu(wort) {
+  wort = String(wort).trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (wort.length < 3) return;
+  const feld = $('#branchen-frei');
+  if (![...feld.querySelectorAll('input')].some((b) => b.value.toLowerCase() === wort.toLowerCase())) {
+    if (feld.children.length >= 10) return melde('Mehr als zehn eigene Stichwörter gehen nicht auf einmal.', true);
+    feld.insertAdjacentHTML('beforeend', `<label title="Entfernen"><input type="checkbox" name="stichwort" value="${esc(wort)}" checked><span>${esc(wort)}</span></label>`);
+  }
+  $('#gruppe-frei').hidden = false;
+  suchfeld.value = '';
+  filtereBranchen();
+  zeigeAuswahlAnzahl();
+}
+
+suchfeld.addEventListener('input', filtereBranchen);
+suchfeld.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault(); // Enter soll hier nicht die ganze Suche starten
+  const sichtbar = $$('input[name=branche]').filter((b) => !b.parentElement.hidden);
+  if (!suchfeld.value.trim()) return;
+  if (sichtbar.length === 1) { sichtbar[0].checked = true; suchfeld.value = ''; filtereBranchen(); zeigeAuswahlAnzahl(); }
+  else if (!sichtbar.length) fuegeStichwortHinzu(suchfeld.value);
+});
+$('#stichwort-neu').addEventListener('click', () => fuegeStichwortHinzu(suchfeld.value));
+// Ein abgewähltes eigenes Stichwort verschwindet ganz.
+$('#branchen-frei').addEventListener('change', (e) => {
+  if (!e.target.checked) e.target.parentElement.remove();
+  $('#gruppe-frei').hidden = !$('#branchen-frei').children.length;
+});
+formular.addEventListener('change', zeigeAuswahlAnzahl);
 
 // ───────── CRM & Google Sheets ─────────
 async function ladeCrm() {

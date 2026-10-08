@@ -91,6 +91,9 @@ td textarea { margin: 0; min-width: 180px; min-height: 34px; resize: vertical; f
 .leer { color: var(--blass); text-align: center; padding: 36px 10px; margin: 0; }
 
 #abmelden { margin: 0 0 0 auto; }
+#branchen-suche { margin-top: 0; }
+#stichwort-neu { margin-top: 8px; white-space: normal; text-align: left; }
+#branchen-frei span::after { content: ' ×'; opacity: .6; }
 input[type=password] { width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; border: 1px solid var(--rand); border-radius: 7px; }
 .plakette.register { background: var(--gruen); color: #fff; }
 .zaehler.faellig { background: var(--rot); color: #fff; }

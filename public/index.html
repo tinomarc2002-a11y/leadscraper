@@ -51,6 +51,15 @@
           <label><input type="checkbox" name="ma" value="250+" checked><span>250+</span></label>
         </div>
 
+        <h2>Branchen <span class="mini" id="branchen-anzahl"></span></h2>
+        <input type="search" id="branchen-suche" placeholder="Branche suchen, z. B. Zahnarzt, Solar, Hundeschule …" autocomplete="off" aria-label="Branche suchen">
+        <button type="button" class="neben klein-knopf" id="stichwort-neu" hidden></button>
+        <p class="klein" id="branchen-hinweis" hidden></p>
+        <div id="gruppe-frei" hidden>
+          <h2 title="Findet Firmen, die das Wort im Namen tragen">Eigene Stichwörter</h2>
+          <div class="chips" id="branchen-frei"></div>
+        </div>
+
         <h2>Hochpreisige Produkte <a href="#" class="mini" data-gruppe="hochpreis">alle / keine</a></h2>
         <div class="chips" id="branchen-hochpreis"></div>
         <h2>Hoher Personalbedarf <a href="#" class="mini" data-gruppe="personal">alle / keine</a></h2>
