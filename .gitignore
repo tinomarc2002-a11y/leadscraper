@@ -1,0 +1,6 @@
+# Lokale Daten: CRM-Einträge, Suchergebnisse, Zwischenspeicher, Google-Sheets-Adresse – gehören nicht ins Repository
+data/
+
+# Werkzeug-Einstellungen
+.claude/
+node_modules/

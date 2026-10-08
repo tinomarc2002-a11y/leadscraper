@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leadscraper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="kopf">
+    <div class="marke"><span class="logo">◎</span> Leadscraper</div>
+    <nav class="reiter" role="tablist">
+      <button class="aktiv" data-reiter="suche">Suche</button>
+      <button data-reiter="crm">CRM <span class="zaehler" id="crm-zaehler">0</span><span class="zaehler faellig" id="crm-faellig" title="Heute fällige Wiedervorlagen" hidden>0</span></button>
+      <button data-reiter="sheets">Google Sheets</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ───────── Suche ───────── -->
+    <section id="reiter-suche" class="zweispaltig">
+      <form id="suchformular" class="karte filter">
+        <h2>Wo und wie viele?</h2>
+        <label>Ort oder PLZ
+          <input type="text" name="ort" placeholder="z. B. Augsburg oder 86150" required>
+        </label>
+        <label>Umkreis: <output id="radius-wert">25</output> km
+          <input type="range" name="radiusKm" min="1" max="150" value="25">
+        </label>
+        <label>Anzahl Leads (1–1000)
+          <input type="number" name="anzahl" min="1" max="1000" value="50" required>
+        </label>
+
+        <h2>Inhaber-Sicherheit</h2>
+        <select name="minStatus">
+          <option value="bestaetigt">Nur doppelt bestätigt (am sichersten)</option>
+          <option value="impressum" selected>Mindestens laut Impressum (empfohlen)</option>
+          <option value="pruefen">Auch unsichere – zum Selbstprüfen</option>
+          <option value="unbekannt">Alle, auch ohne Inhaber</option>
+        </select>
+
+        <label class="haken"><input type="checkbox" name="ohneCrm" checked> Firmen überspringen, die schon im CRM sind</label>
+        <label class="haken"><input type="checkbox" name="websiteSuchen"> Fehlende Websites erraten <span class="unter">(findet nur wenige)</span></label>
+
+        <h2>Mitarbeiter (geschätzt)</h2>
+        <div class="chips" id="ma-klassen">
+          <label><input type="checkbox" name="ma" value="1–9" checked><span>1–9</span></label>
+          <label><input type="checkbox" name="ma" value="10–49" checked><span>10–49</span></label>
+          <label><input type="checkbox" name="ma" value="50–249" checked><span>50–249</span></label>
+          <label><input type="checkbox" name="ma" value="250+" checked><span>250+</span></label>
+        </div>
+
+        <h2>Hochpreisige Produkte <a href="#" class="mini" data-gruppe="hochpreis">alle / keine</a></h2>
+        <div class="chips" id="branchen-hochpreis"></div>
+        <h2>Hoher Personalbedarf <a href="#" class="mini" data-gruppe="personal">alle / keine</a></h2>
+        <div class="chips" id="branchen-personal"></div>
+
+        <div class="formfuss">
+          <button type="submit" class="haupt" id="start">Suche starten</button>
+          <button type="button" class="neben" id="stopp" hidden>Stoppen</button>
+        </div>
+      </form>
+
+      <div class="ergebnis">
+        <div class="karte" id="fortschritt" hidden>
+          <div class="fortschritt-kopf"><strong id="fortschritt-titel"></strong><span id="fortschritt-zahlen"></span></div>
+          <div class="balken"><div id="balken-fuellung"></div></div>
+          <p class="klein" id="fortschritt-meldung"></p>
+        </div>
+        <div class="karte">
+          <div class="leiste" id="leiste-suche"></div>
+          <div class="tabellenrahmen"><table id="tabelle-suche"></table></div>
+          <p class="leer" id="leer-suche">Noch keine Suche gestartet. Links Ort, Umkreis und Branchen wählen und auf „Suche starten“ klicken.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────── CRM ───────── -->
+    <section id="reiter-crm" hidden>
+      <div class="karte">
+        <div class="leiste" id="leiste-crm"></div>
+        <div class="tabellenrahmen"><table id="tabelle-crm"></table></div>
+        <p class="leer" id="leer-crm">Noch keine Leads gespeichert. In der Suche Leads auswählen und „Ins CRM übernehmen“ klicken.</p>
+      </div>
+    </section>
+
+    <!-- ───────── Google Sheets ───────── -->
+    <section id="reiter-sheets" hidden>
+      <div class="karte text">
+        <h2>Leads direkt in eine Google-Tabelle schicken</h2>
+        <p>Einmalige Einrichtung, dauert etwa zwei Minuten und kostet nichts. Danach landet jeder Klick auf „An Google Sheet senden“ direkt in deiner Tabelle. Bereits vorhandene Leads werden nicht doppelt eingetragen.</p>
+        <ol>
+          <li>Neue Tabelle anlegen: <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a></li>
+          <li>Im Menü <strong>Erweiterungen → Apps Script</strong> öffnen, den vorhandenen Code löschen und diesen einfügen:
+            <div class="codeblock"><button type="button" class="neben mini-knopf" id="code-kopieren">Code kopieren</button><pre id="apps-script"></pre></div>
+          </li>
+          <li>Oben rechts <strong>Bereitstellen → Neue Bereitstellung</strong>, Typ <strong>Web-App</strong>, „Ausführen als: Ich“, „Zugriff: Jeder“ wählen und bereitstellen. Google fragt einmal nach der Berechtigung für deine Tabelle.</li>
+          <li>Die angezeigte <strong>Web-App-URL</strong> kopieren und hier einfügen:</li>
+        </ol>
+        <div class="zeile">
+          <input type="url" id="sheets-url" placeholder="https://script.google.com/macros/s/…/exec">
+          <button type="button" class="haupt" id="sheets-speichern">Speichern &amp; testen</button>
+        </div>
+        <p class="klein" id="sheets-status"></p>
+        <p class="klein">Hinweis: Wer die URL kennt, kann Zeilen in diese eine Tabelle schreiben – also nicht weitergeben. Alternativ funktionieren immer „CSV herunterladen“ und „Für Sheets kopieren“ (dann in der Tabelle mit Strg+V einfügen).</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="kontakt-dialog">
+    <form id="kontakt-formular">
+      <h2>Kontakt eintragen</h2>
+      <p class="klein" id="kontakt-titel"></p>
+      <label>Ergebnis<select id="kontakt-ergebnis"></select></label>
+      <label>Notiz<textarea id="kontakt-notiz" rows="3" placeholder="Was wurde besprochen?"></textarea></label>
+      <label>Wiedervorlage am<input type="date" id="kontakt-wv"></label>
+      <div class="schnellwahl">
+        <button type="button" class="neben klein-knopf" data-tage="1">morgen</button>
+        <button type="button" class="neben klein-knopf" data-tage="3">in 3 Tagen</button>
+        <button type="button" class="neben klein-knopf" data-tage="7">in 1 Woche</button>
+        <button type="button" class="neben klein-knopf" data-tage="30">in 1 Monat</button>
+      </div>
+      <div class="dialogfuss">
+        <button type="button" class="neben" id="kontakt-abbrechen">Abbrechen</button>
+        <button type="submit" class="haupt">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="hinweis" class="hinweis" hidden></div>
+  <script src="spalten.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
