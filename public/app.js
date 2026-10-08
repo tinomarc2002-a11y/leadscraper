@@ -26,11 +26,40 @@ const ansichten = {
 let jobId = null, jobStand = 0;
 let abfrageTimer = null;
 
+// Betriebsart: 'lokal' (Server auf dem eigenen PC) oder 'cloud' (Vercel, mit Anmeldung und Suche in Etappen).
+let MODUS = { modus: 'lokal', register: true };
+const PASSWORT_MERKER = 'leadscraper-passwort';
+
 async function api(pfad, daten) {
-  const r = await fetch(pfad, daten === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(daten) });
+  const passwort = localStorage.getItem(PASSWORT_MERKER) || '';
+  const kopf = { 'X-Leadscraper-Passwort': encodeURIComponent(passwort) };
+  const r = await fetch(pfad, daten === undefined ? { headers: kopf } : { method: 'POST', headers: { ...kopf, 'Content-Type': 'application/json' }, body: JSON.stringify(daten) });
+  if (r.status === 401) {
+    await frageNachPasswort(!!passwort);
+    return api(pfad, daten);
+  }
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.fehler || 'Der Server hat nicht geantwortet.');
   return d;
+}
+
+// Zeigt den Anmeldedialog. Mehrere gleichzeitig abgewiesene Anfragen teilen sich eine Eingabe.
+let anmeldung = null;
+function frageNachPasswort(warFalsch) {
+  anmeldung ||= new Promise((fertig) => {
+    const d = $('#anmelde-dialog');
+    $('#anmelde-fehler').hidden = !warFalsch;
+    $('#anmelde-passwort').value = '';
+    d.showModal();
+    $('#anmelde-formular').onsubmit = (e) => {
+      e.preventDefault();
+      localStorage.setItem(PASSWORT_MERKER, $('#anmelde-passwort').value);
+      d.close();
+      anmeldung = null;
+      fertig();
+    };
+  });
+  return anmeldung;
 }
 
 let hinweisTimer;
@@ -163,6 +192,7 @@ function baueLeiste(name) {
     <button class="neben a-kopieren">Für Sheets kopieren</button>
     <button class="neben a-sheets">An Google Sheet senden</button>`;
   const leiste = $('#leiste-' + name), a = ansichten[name];
+  $('.a-register', leiste).hidden = !MODUS.register;
   $('.f-sort', leiste).value = a.sortierung;
   $('.f-text', leiste).addEventListener('input', (e) => { a.text = e.target.value; zeichne(name); });
   $('.f-status', leiste).addEventListener('change', (e) => { a.status = e.target.value; zeichne(name); });
@@ -352,14 +382,88 @@ async function holeStand() {
   if (!d.fertig) abfrageTimer = setTimeout(versuche(holeStand), 1200);
 }
 
+// ───────── Suche in der Online-Variante ─────────
+// Auf Vercel läuft kein Hintergrundauftrag. Der Browser holt erst die Unternehmen je Branchengruppe und lässt sie
+// dann in kleinen Paketen prüfen; Fortschritt und Ergebnis liegen hier im Browser.
+let cloudSuche = null;
+const SUCHE_MERKER = 'leadscraper-suche';
+const BRANCHEN_JE_ABRUF = 3, KANDIDATEN_JE_PAKET = 8, PAKETE_GLEICHZEITIG = 2;
+
+function zeigeCloud() {
+  ansichten.suche.leads = cloudSuche.leads;
+  zeigeFortschritt({ ...cloudSuche, gesamt: cloudSuche.leads.length });
+  zeichne('suche');
+}
+
+async function starteCloudSuche(p) {
+  if (!p.branchen.length) throw new Error('Bitte mindestens eine Branche auswählen.');
+  if (cloudSuche && !cloudSuche.fertig) cloudSuche.abbruch = true;
+  const c = (cloudSuche = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0 }, fertig: false, fehler: '', abbruch: false });
+  const aktuell = () => cloudSuche === c;
+  ansichten.suche.auswahl.clear();
+  zeigeCloud();
+  try {
+    let zentrum = null;
+    const alle = new Map();
+    for (let i = 0; i < p.branchen.length && !c.abbruch; i += BRANCHEN_JE_ABRUF) {
+      c.meldung = `Unternehmen werden gesammelt (Branche ${i + 1} bis ${Math.min(i + BRANCHEN_JE_ABRUF, p.branchen.length)} von ${p.branchen.length}) …`;
+      if (aktuell()) zeigeCloud();
+      const r = await api('/api/kandidaten', { parameter: p, branchen: p.branchen.slice(i, i + BRANCHEN_JE_ABRUF), zentrum });
+      zentrum = r.zentrum;
+      c.zentrum = zentrum.name;
+      c.ohneWebsite += r.ohneWebsite;
+      c.schonImCrm += r.schonImCrm;
+      // Filialen mit derselben Website zählen als ein Unternehmen – die nächstgelegene bleibt.
+      for (const k of r.schlange) { const alt = alle.get(k.schluessel); if (!alt || k.entfernungKm < alt.entfernungKm) alle.set(k.schluessel, k); }
+    }
+    const schlange = [...alle.values()].sort((x, y) => x.entfernungKm - y.entfernungKm);
+    c.kandidaten = schlange.length;
+    c.meldung = 'Websites und Impressen werden geprüft …';
+    let naechster = 0;
+    const arbeiter = async () => {
+      while (!c.abbruch && c.leads.length < p.anzahl && naechster < schlange.length) {
+        const paket = schlange.slice(naechster, naechster + KANDIDATEN_JE_PAKET);
+        naechster += paket.length;
+        const { ergebnisse } = await api('/api/pruefen', { parameter: p, kandidaten: paket }).catch(() => ({ ergebnisse: paket.map(() => ({ grund: 'fehler' })) }));
+        for (const r of ergebnisse) {
+          c.geprueft++;
+          if (r.websiteGefunden) c.websitesGefunden++;
+          if (r.grund === 'crm') c.schonImCrm++;
+          else if (r.grund) c.aussortiert[r.grund]++;
+          else if (c.leads.length < p.anzahl) c.leads.push(r.lead);
+        }
+        if (aktuell()) zeigeCloud();
+      }
+    };
+    await Promise.all(Array.from({ length: PAKETE_GLEICHZEITIG }, arbeiter));
+    c.meldung = c.abbruch ? 'Suche gestoppt.' : c.leads.length >= p.anzahl ? 'Gewünschte Anzahl erreicht.' : 'Alle Unternehmen im Umkreis geprüft.';
+  } catch (e) {
+    c.fehler = e.message;
+    c.meldung = '';
+  }
+  c.fertig = true;
+  if (!aktuell()) return;
+  zeigeCloud();
+  try { localStorage.setItem(SUCHE_MERKER, JSON.stringify(c)); } catch {} // zu groß für den Browserspeicher: dann eben ohne Merken
+}
+
+function ladeGemerkteCloudSuche() {
+  try { cloudSuche = JSON.parse(localStorage.getItem(SUCHE_MERKER)); } catch {}
+  if (cloudSuche) { cloudSuche.fertig = true; zeigeCloud(); }
+}
+
 formular.addEventListener('submit', versuche(async (e) => {
   e.preventDefault();
   const p = leseFormular();
   localStorage.setItem('leadscraper-formular', JSON.stringify(p));
+  if (MODUS.modus === 'cloud') return starteCloudSuche(p);
   await api('/api/suche', p);
   await holeStand();
 }));
-$('#stopp').addEventListener('click', versuche(() => api('/api/suche/stop', {})));
+$('#stopp').addEventListener('click', versuche(async () => {
+  if (MODUS.modus === 'cloud') { if (cloudSuche) cloudSuche.abbruch = true; return; }
+  await api('/api/suche/stop', {});
+}));
 formular.radiusKm.addEventListener('input', (e) => ($('#radius-wert').textContent = e.target.value));
 $$('a[data-gruppe]').forEach((link) => link.addEventListener('click', (e) => {
   e.preventDefault();
@@ -440,12 +544,19 @@ $('#sheets-speichern').addEventListener('click', versuche(async () => {
   }
 }));
 
+$('#anmelde-dialog').addEventListener('cancel', (e) => e.preventDefault());
+$('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWORT_MERKER); location.reload(); });
+
 (versuche(async () => {
+  MODUS = await api('/api/modus');
+  const cloud = MODUS.modus === 'cloud';
+  $('#abmelden').hidden = !cloud;
   baueLeiste('suche');
   baueLeiste('crm');
   await ladeBranchen();
   await ladeCrm();
   $('#sheets-url').value = (await api('/api/einstellungen')).sheetsUrl || '';
+  if (cloud) { zeichne('suche'); return ladeGemerkteCloudSuche(); }
   await holeStand();
   zeichne('suche');
   await verfolgeRegister(true);

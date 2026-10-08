@@ -14,6 +14,7 @@
       <button data-reiter="crm">CRM <span class="zaehler" id="crm-zaehler">0</span><span class="zaehler faellig" id="crm-faellig" title="Heute fällige Wiedervorlagen" hidden>0</span></button>
       <button data-reiter="sheets">Google Sheets</button>
     </nav>
+    <button type="button" class="neben klein-knopf" id="abmelden" hidden>Abmelden</button>
   </header>
 
   <main>
@@ -124,6 +125,16 @@
         <button type="button" class="neben" id="kontakt-abbrechen">Abbrechen</button>
         <button type="submit" class="haupt">Speichern</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="anmelde-dialog">
+    <form id="anmelde-formular">
+      <h2>Anmelden</h2>
+      <p class="klein">Diese Online-Version ist mit einem Passwort geschützt.</p>
+      <p class="klein fehler" id="anmelde-fehler" hidden>Das Passwort stimmt nicht.</p>
+      <label>Passwort<input type="password" id="anmelde-passwort" autocomplete="current-password" required></label>
+      <div class="dialogfuss"><button type="submit" class="haupt">Anmelden</button></div>
     </form>
   </dialog>
 

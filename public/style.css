@@ -90,6 +90,8 @@ td select { padding: 5px 6px; margin: 0; min-width: 120px; }
 td textarea { margin: 0; min-width: 180px; min-height: 34px; resize: vertical; font-size: 13px; }
 .leer { color: var(--blass); text-align: center; padding: 36px 10px; margin: 0; }
 
+#abmelden { margin: 0 0 0 auto; }
+input[type=password] { width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; border: 1px solid var(--rand); border-radius: 7px; }
 .plakette.register { background: var(--gruen); color: #fff; }
 .zaehler.faellig { background: var(--rot); color: #fff; }
 .haken { display: flex; gap: 8px; align-items: baseline; font-weight: 500; margin: 10px 0 0; }

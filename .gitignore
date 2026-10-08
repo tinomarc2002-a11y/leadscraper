@@ -4,3 +4,6 @@ data/
 # Werkzeug-Einstellungen
 .claude/
 node_modules/
+
+# Vercel
+.vercel/

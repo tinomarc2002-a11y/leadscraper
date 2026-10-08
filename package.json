@@ -1,0 +1,15 @@
+{
+  "name": "leadscraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Geprüfte Firmen-Leads mit Inhaber aus dem Impressum – lokal per start.bat oder online auf Vercel",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.0"
+  }
+}
