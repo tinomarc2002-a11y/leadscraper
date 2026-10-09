@@ -95,7 +95,7 @@ function sichtbare(name) {
     return !suchtext || [l.name, l.inhaber, l.weitere, l.ort, l.plz, l.branche, l.beschreibung, l.notiz].some((w) => String(w || '').toLowerCase().includes(suchtext));
   });
   const vergleich = {
-    entfernung: (x, y) => x.entfernungKm - y.entfernungKm,
+    entfernung: (x, y) => (x.entfernungKm ?? 9999) - (y.entfernungKm ?? 9999),
     name: (x, y) => x.name.localeCompare(y.name, 'de'),
     sicherheit: (x, y) => RANG[y.status] - RANG[x.status] || x.entfernungKm - y.entfernungKm,
     mitarbeiter: (x, y) => y.maZahl - x.maZahl,
@@ -146,7 +146,7 @@ function zeileHtml(l, name) {
       <div class="beschreibung" title="${esc(l.beschreibung)}">${esc(l.beschreibung)}</div></td>
     <td class="spalte-inhaber">${inhaberHtml(l, name)}</td>
     <td class="spalte-kontakt">${l.telefon ? `<div><a href="tel:${esc(l.telefon.replace(/[^\d+]/g, ''))}">${esc(l.telefon)}</a></div>` : ''}${l.email ? `<div><a href="mailto:${esc(l.email)}">${esc(l.email)}</a></div>` : ''}${!l.telefon && !l.email ? '<span class="unter">–</span>' : ''}</td>
-    <td class="spalte-ort">${adresse.map(esc).join('<br>') || '<span class="unter">Adresse unbekannt</span>'}<div class="unter">${esc(l.entfernungKm)} km entfernt</div></td>
+    <td class="spalte-ort">${adresse.map(esc).join('<br>') || '<span class="unter">Adresse unbekannt</span>'}${l.entfernungKm == null ? '' : `<div class="unter">${esc(l.entfernungKm)} km entfernt</div>`}</td>
     <td title="${esc(l.maQuelle)}"><div>${esc(l.maKlasse)}</div><div class="unter">${grob ? '~' : ''}${esc(l.maZahl)}${grob ? ' geschätzt' : ''}</div></td>
     <td class="links">${web ? `<a href="${esc(web)}" target="_blank" rel="noopener noreferrer">Website</a>` : ''}${imp ? `<a href="${esc(imp)}" target="_blank" rel="noopener noreferrer">Impressum</a>` : ''}
       ${stellen ? `<a href="${esc(stellen)}" target="_blank" rel="noopener noreferrer">Stellenseite</a>` : ''}
@@ -373,7 +373,7 @@ const formular = $('#suchformular');
 function leseFormular() {
   const f = new FormData(formular);
   return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), deutschland: formular.deutschland.checked, anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: formular.alleBranchen.checked ? ['alle'] : f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked, websiteErraten: formular.websiteSuchen.checked,
-    rechtsformen: f.getAll('rechtsform'), nurTelefon: formular.nurTelefon.checked, nurEmail: formular.nurEmail.checked, nurKarriere: formular.nurKarriere.checked };
+    internet: formular.internet.checked, rechtsformen: f.getAll('rechtsform'), nurTelefon: formular.nurTelefon.checked, nurEmail: formular.nurEmail.checked, nurKarriere: formular.nurKarriere.checked };
 }
 
 function zeigeFortschritt(d) {
@@ -391,6 +391,7 @@ function zeigeFortschritt(d) {
   if (aus.sicherheit || aus.groesse || aus.filter) teile.push(`Aussortiert: ${aus.sicherheit} wegen zu unsicherem Inhaber, ${aus.groesse} wegen Größenfilter` + (aus.filter ? `, ${aus.filter} wegen Rechtsform- oder Kontaktfilter.` : '.'));
   if (d.schonImCrm) teile.push(`${d.schonImCrm} schon im CRM – übersprungen.`);
   if (d.websitesGefunden) teile.push(`${d.websitesGefunden} fehlende Websites ermittelt.`);
+  if (d.ausInternet) teile.push(`${d.ausInternet} Treffer stammen aus der Internet-Suche.`);
   if (d.ohneWebsite) teile.push(`${d.ohneWebsite} Einträge ohne Website übersprungen (Inhaber nicht prüfbar).`);
   if (d.fertig && !d.fehler && !d.abbruch && d.gesamt < d.parameter.anzahl) teile.push(d.parameter.deutschland ? 'Für mehr Treffer: mehr Branchen wählen oder die Inhaber-Sicherheit lockern.' : 'Für mehr Treffer: Umkreis vergrößern, „Ganz Deutschland“ wählen, mehr Branchen wählen oder die Inhaber-Sicherheit lockern.');
   $('#leer-suche').textContent = laeuft ? 'Die ersten Treffer erscheinen hier, sobald die Impressen geprüft sind.' : 'Keine passenden Leads gefunden.';
@@ -571,6 +572,7 @@ async function ladeBranchen() {
   for (const feld of ['nurTelefon', 'nurEmail', 'nurKarriere']) formular[feld].checked = gemerkt[feld] === true;
   formular.alleBranchen.checked = !!gemerkt.branchen?.includes('alle');
   formular.deutschland.checked = gemerkt.deutschland === true;
+  if (gemerkt.internet === false) formular.internet.checked = false;
   zeigeDeutschland();
   (gemerkt.stichworte || []).forEach(fuegeStichwortHinzu);
   zeigeAuswahlAnzahl();
@@ -702,6 +704,23 @@ $('#sheets-speichern').addEventListener('click', versuche(async () => {
   }
 }));
 
+// ───────── Internet-Suche (nur lokale Version) ─────────
+// Zeigt, ob die Liste der deutschen Internet-Adressen eingerichtet ist, und richtet sie auf Knopfdruck ein.
+async function zeigeInternetStand() {
+  if (!MODUS.internet) return;
+  const d = await api('/api/internet');
+  $('#internet-zeile').hidden = !d.vorhanden;
+  $('#internet-einrichten').hidden = d.vorhanden || d.einrichtung.laeuft;
+  $('#internet-status').textContent = d.vorhanden ? `(${(d.anzahl / 1e6).toFixed(1).replace('.', ',')} Mio. deutsche Adressen – im Umkreis dauert der erste Durchlauf je Branche einige Minuten, danach geht es schnell)` : '';
+  if (d.einrichtung.laeuft) { melde(d.einrichtung.meldung, false, true); setTimeout(versuche(zeigeInternetStand), 1500); }
+  else if (d.einrichtung.fehler) melde(d.einrichtung.fehler, true);
+  else if (d.einrichtung.meldung) melde(d.einrichtung.meldung);
+}
+$('#internet-einrichten').addEventListener('click', versuche(async () => {
+  await api('/api/internet', {});
+  await zeigeInternetStand();
+}));
+
 $('#anmelde-dialog').addEventListener('cancel', (e) => e.preventDefault());
 $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWORT_MERKER); location.reload(); });
 
@@ -716,6 +735,7 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   await ladeBranchen();
   await ladeCrm();
   $('#sheets-url').value = (await api('/api/einstellungen')).sheetsUrl || '';
+  await zeigeInternetStand();
   if (cloud) { zeichne('suche'); return ladeGemerkteCloudSuche(); }
   await holeStand();
   zeichne('suche');

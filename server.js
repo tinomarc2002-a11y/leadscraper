@@ -9,7 +9,11 @@ const { geocode, sucheUnternehmen } = require('./lib/osm');
 const { pruefeLeads, freieSuchen } = require('./lib/register');
 const { sendeAnSheets } = require('./lib/sheets');
 const CRM = require('./lib/crm');
-const { MITTE, bedarfFuer, leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('./lib/suchlauf');
+const { MITTE, bedarfFuer, leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat, ausschlussgrund } = require('./lib/suchlauf');
+const Internet = require('./lib/internet');
+
+// Websites laden und auswerten übernehmen Hilfsprozesse – ein Absturz dort reißt den Server nicht mit (siehe lib/werkzeug.js).
+require('./lib/werkzeug').nutzeHilfsprozesse();
 
 const PORT = +(process.argv.find((a) => a.startsWith('--port=')) || '').slice(7) || +process.env.PORT || 4310;
 const DATA = path.join(__dirname, 'data');
@@ -62,13 +66,37 @@ async function laufe(j) {
     if (j.abbruch || j.leads.length >= p.anzahl || ausgeschoepft) break;
     j.meldung = 'Noch nicht genug Treffer – es werden weitere Unternehmen gesammelt …';
   }
+  // Reicht die Karte nicht: weiter über die Liste aller .de-Adressen, die ein Branchenwort tragen. Bei sehr breiter
+  // Auswahl wären das Hunderttausende Adressen – dort bleibt es bei der Karte.
+  if (!j.abbruch && j.leads.length < p.anzahl && p.internet && branchen.length <= 30 && Internet.status().vorhanden) {
+    const stand = j.geprueft;
+    const r = await Internet.suche({
+      branchen, zentrum, radiusKm: p.deutschland ? 0 : p.radiusKm, ortName: p.ort, bekannteHosts: hosts,
+      melde: (m) => { j.meldung = m; },
+      weiter: () => !j.abbruch && j.leads.length < p.anzahl,
+      nimm: (lead) => {
+        // Manche Firmen haben mehrere Adressen (Website und Shop) – jede Firma nur einmal aufnehmen.
+        // Dasselbe gilt für mehrere Seiten derselben Person am selben Ort.
+        const firma = (l) => (l.firmierung ? l.firmierung.toLowerCase() + '|' + l.plz : '');
+        const person = (l) => (l.inhaber && l.plz ? l.inhaber.toLowerCase() + '|' + l.plz : '');
+        if (CRM.imCrm(lead, CRM.kennungen(j.leads)) || j.leads.some((l) => (firma(lead) && firma(l) === firma(lead)) || (person(lead) && person(l) === person(lead)))) return;
+        const grund = ausschlussgrund(lead, p, kennungen);
+        if (grund === 'crm') j.schonImCrm++;
+        else if (grund) j.aussortiert[grund]++;
+        else if (j.leads.length < p.anzahl) { j.leads.push(lead); j.ausInternet++; }
+      },
+    });
+    j.geprueft = stand + r.erledigt;
+    j.kandidaten += r.gesamt;
+    ausgeschoepft = r.ausgeschoepft;
+  }
   j.meldung = j.abbruch ? 'Suche gestoppt.' : j.leads.length >= p.anzahl ? 'Gewünschte Anzahl erreicht.' : p.deutschland ? 'Alle erreichbaren Unternehmen geprüft.' : 'Alle Unternehmen im Umkreis geprüft.';
 }
 
 function starteSuche(roh) {
   const p = leseParameter(roh);
   if (job && !job.fertig) job.abbruch = true;
-  const j = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, imCrmNachPruefung: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0, filter: 0 }, fertig: false, fehler: '', abbruch: false, stand: 0 };
+  const j = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, imCrmNachPruefung: 0, ausInternet: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0, filter: 0 }, fertig: false, fehler: '', abbruch: false, stand: 0 };
   job = j;
   // Zwischenstand alle paar Sekunden sichern, damit bei einem Abbruch nichts verloren geht.
   const sicherung = setInterval(() => { if (job === j) schreibe('letzte-suche.json', j); }, 8000);
@@ -125,7 +153,9 @@ function leseKoerper(req) {
 async function api(req, pfad, url) {
   const post = req.method === 'POST';
   const k = post ? await leseKoerper(req) : {};
-  if (pfad === '/api/modus') return { modus: 'lokal', register: true };
+  if (pfad === '/api/modus') return { modus: 'lokal', register: true, internet: true };
+  if (pfad === '/api/internet' && post) { Internet.richteEin(); return Internet.status(); }
+  if (pfad === '/api/internet') return Internet.status();
   if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, gruppeLabel, suche }) => ({ id, label, gruppe, gruppeLabel, suche }));
   if (pfad === '/api/suche' && post) return { id: starteSuche(k).id };
   if (pfad === '/api/suche') {
