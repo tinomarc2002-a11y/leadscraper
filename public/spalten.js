@@ -1,5 +1,25 @@
-// Spalten für CSV, Zwischenablage und Google Sheets – wird von Browser und Server gemeinsam benutzt.
+// Spalten für CSV, Zwischenablage und Google Sheets sowie die Einteilung der Rechtsformen –
+// wird von Browser und Server gemeinsam benutzt.
 const STATUS_TEXT = { register: 'Im Handelsregister bestätigt', bestaetigt: 'Doppelt bestätigt', impressum: 'Laut Impressum', pruefen: 'Bitte prüfen', unbekannt: 'Nicht gefunden' };
+
+// Rechtsformen, nach denen sich filtern lässt. Wer im Impressum keinen Rechtsformzusatz führt,
+// ist in aller Regel Einzelunternehmer oder Freiberufler.
+const RECHTSFORM_GRUPPEN = [
+  ['gmbh', 'GmbH'], ['ug', 'UG'], ['gmbhco', 'GmbH & Co. KG'], ['ag', 'AG / SE'], ['ek', 'e.K.'],
+  ['personen', 'GbR, OHG, KG, PartG'], ['einzel', 'Einzelunternehmen / Freiberufler'], ['verein', 'Verein, gGmbH, Genossenschaft'], ['sonst', 'Sonstige'],
+];
+function rechtsformGruppe(rechtsform) {
+  const rf = rechtsform || '';
+  if (/GmbH & Co|UG.*Co/.test(rf)) return 'gmbhco';
+  if (/^(gGmbH|e\.V\.|eG)$/.test(rf)) return 'verein';
+  if (/GmbH|mbH/.test(rf)) return 'gmbh';
+  if (rf === 'UG') return 'ug';
+  if (/^(AG|SE|KGaA)$/.test(rf)) return 'ag';
+  if (rf === 'e.K.') return 'ek';
+  if (/^(GbR|OHG|KG|PartG)$/.test(rf)) return 'personen';
+  if (!rf || rf === 'Einzelunternehmen') return 'einzel';
+  return 'sonst';
+}
 
 // Weitere Geschäftsführer/Inhaber als „Frau Erika Muster (Geschäftsführer)“
 const person = (nr) => (l) => {
@@ -36,6 +56,7 @@ const SPALTEN = [
   ['Grundlage Schätzung', (l) => l.maQuelle],
   ['Website', (l) => l.website],
   ['Impressum', (l) => l.impressumUrl],
+  ['Stellenseite', (l) => l.karriereUrl],
   ['Hinweise', (l) => l.hinweise],
   ['CRM-Status', (l) => l.crmStatus],
   ['Wiedervorlage', (l) => l.wiedervorlage],
@@ -47,4 +68,4 @@ const SPALTEN = [
 
 const zeileAus = (lead) => SPALTEN.map(([, hole]) => { const w = hole(lead); return w == null ? '' : String(w); });
 
-if (typeof module !== 'undefined') module.exports = { SPALTEN, STATUS_TEXT, zeileAus };
+if (typeof module !== 'undefined') module.exports = { SPALTEN, STATUS_TEXT, RECHTSFORM_GRUPPEN, rechtsformGruppe, zeileAus };

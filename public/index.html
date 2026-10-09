@@ -25,9 +25,10 @@
         <label>Ort oder PLZ
           <input type="text" name="ort" placeholder="z. B. Augsburg oder 86150" required>
         </label>
-        <label>Umkreis: <output id="radius-wert">25</output> km
+        <label id="umkreis-zeile">Umkreis: <output id="radius-wert">25</output> km
           <input type="range" name="radiusKm" min="1" max="150" value="25">
         </label>
+        <label class="haken"><input type="checkbox" name="deutschland"> Ganz Deutschland <span class="unter">(ohne Umkreisgrenze, nächstgelegene zuerst)</span></label>
         <label>Anzahl Leads (1–1000)
           <input type="number" name="anzahl" min="1" max="1000" value="50" required>
         </label>
@@ -51,6 +52,16 @@
           <label><input type="checkbox" name="ma" value="250+" checked><span>250+</span></label>
         </div>
 
+        <h2>Rechtsform <a href="#" class="mini" id="rechtsform-alle">alle / keine</a></h2>
+        <div class="chips" id="rechtsformen"></div>
+
+        <h2>Nur Firmen mit …</h2>
+        <div class="chips">
+          <label><input type="checkbox" name="nurTelefon"><span>Telefonnummer</span></label>
+          <label><input type="checkbox" name="nurEmail"><span>E-Mail-Adresse</span></label>
+          <label title="Die Website hat eine Karriere-, Jobs- oder Stellenseite – ein Zeichen, dass Personal gesucht wird"><input type="checkbox" name="nurKarriere"><span>Karriere-/Stellenseite</span></label>
+        </div>
+
         <h2>Branchen <span class="mini" id="branchen-anzahl"></span></h2>
         <input type="search" id="branchen-suche" placeholder="Branche suchen, z. B. Zahnarzt, Solar, Hundeschule …" autocomplete="off" aria-label="Branche suchen">
         <button type="button" class="neben klein-knopf" id="stichwort-neu" hidden></button>
@@ -60,10 +71,8 @@
           <div class="chips" id="branchen-frei"></div>
         </div>
 
-        <h2>Hochpreisige Produkte <a href="#" class="mini" data-gruppe="hochpreis">alle / keine</a></h2>
-        <div class="chips" id="branchen-hochpreis"></div>
-        <h2>Hoher Personalbedarf <a href="#" class="mini" data-gruppe="personal">alle / keine</a></h2>
-        <div class="chips" id="branchen-personal"></div>
+        <label class="haken stark"><input type="checkbox" name="alleBranchen"> Alle Branchen im Umkreis <span class="unter">(nichts ausschließen – das Sammeln dauert einige Minuten)</span></label>
+        <div id="branchen-gruppen"></div>
 
         <div class="formfuss">
           <button type="submit" class="haupt" id="start">Suche starten</button>
@@ -79,6 +88,7 @@
         </div>
         <div class="karte">
           <div class="leiste" id="leiste-suche"></div>
+          <div class="leiste filterzeile" id="filter-suche"></div>
           <div class="tabellenrahmen"><table id="tabelle-suche"></table></div>
           <p class="leer" id="leer-suche">Noch keine Suche gestartet. Links Ort, Umkreis und Branchen wählen und auf „Suche starten“ klicken.</p>
         </div>
@@ -89,6 +99,7 @@
     <section id="reiter-crm" hidden>
       <div class="karte">
         <div class="leiste" id="leiste-crm"></div>
+        <div class="leiste filterzeile" id="filter-crm"></div>
         <div class="tabellenrahmen"><table id="tabelle-crm"></table></div>
         <p class="leer" id="leer-crm">Noch keine Leads gespeichert. In der Suche Leads auswählen und „Ins CRM übernehmen“ klicken.</p>
       </div>

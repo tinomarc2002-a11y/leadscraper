@@ -7,10 +7,11 @@ const { geocode, sucheUnternehmen } = require('../lib/osm');
 const { sendeAnSheets } = require('../lib/sheets');
 const CRM = require('../lib/crm');
 const speicher = require('../lib/speicher');
-const { leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('../lib/suchlauf');
+const { MITTE, bedarfFuer, leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('../lib/suchlauf');
 
 const MAX_JE_PAKET = 10;
 const MAX_BRANCHEN_JE_ABRUF = 3;
+const MAX_KANDIDATEN = 6000;
 
 function passwortStimmt(req) {
   const soll = process.env.LEADSCRAPER_PASSWORT;
@@ -25,18 +26,27 @@ function passwortStimmt(req) {
 
 async function api(pfad, post, k) {
   if (pfad === '/api/modus') return { modus: 'cloud', register: false, passwort: !!process.env.LEADSCRAPER_PASSWORT };
-  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, suche }) => ({ id, label, gruppe, suche }));
+  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, gruppeLabel, suche }) => ({ id, label, gruppe, gruppeLabel, suche }));
 
   // Etappe 1: Unternehmen im Umkreis sammeln – höchstens drei Branchen je Abruf, damit die Laufzeitgrenze sicher hält.
   if (pfad === '/api/kandidaten' && post) {
     const p = leseParameter(k.parameter || {});
     // Der Browser schickt je Abruf einen Ausschnitt seiner Auswahl: Katalogbranchen und/oder eigene Stichwörter.
     const ausschnitt = Array.isArray(k.branchen) || Array.isArray(k.stichworte);
-    const branchen = branchenFuer(ausschnitt ? k.branchen : p.branchen, ausschnitt ? k.stichworte : p.stichworte).slice(0, MAX_BRANCHEN_JE_ABRUF);
-    const zentrum = k.zentrum && Number.isFinite(+k.zentrum.lat) && Number.isFinite(+k.zentrum.lon) ? { lat: +k.zentrum.lat, lon: +k.zentrum.lon, name: String(k.zentrum.name || '') } : await geocode(p.ort);
-    const kandidaten = await sucheUnternehmen(branchen, zentrum, p.radiusKm);
-    const kennungen = p.ohneCrm ? CRM.kennungen(await speicher.lese('crm', [])) : new Set();
-    return { zentrum, ...waehleKandidaten(kandidaten, p, kennungen) };
+    let branchen = branchenFuer(ausschnitt ? k.branchen : p.branchen, ausschnitt ? k.stichworte : p.stichworte);
+    // „Alle Branchen“ ist ein einziger gebündelter Abruf; einzeln gewählte Branchen kommen in kleinen Gruppen.
+    if (branchen.length > MAX_BRANCHEN_JE_ABRUF && !(ausschnitt ? k.branchen : p.branchen).includes('alle')) branchen.length = MAX_BRANCHEN_JE_ABRUF;
+    const zentrum = k.zentrum && Number.isFinite(+k.zentrum.lat) && Number.isFinite(+k.zentrum.lon) ? { lat: +k.zentrum.lat, lon: +k.zentrum.lon, name: String(k.zentrum.name || '') } : p.ort ? await geocode(p.ort) : MITTE;
+    const crm = p.ohneCrm ? await speicher.lese('crm', []) : [];
+    // Bei „ganz Deutschland“ nennt der Browser den Bedarf je Abruf, weil er die Branchen auf mehrere Abrufe verteilt.
+    const bedarf = Math.min(20000, Math.max(100, +k.bedarf || bedarfFuer(p, crm.length)));
+    const kandidaten = await sucheUnternehmen(branchen, zentrum, p.deutschland ? 0 : p.radiusKm, undefined, undefined, bedarf);
+    const kennungen = CRM.kennungen(crm);
+    const auswahl = waehleKandidaten(kandidaten, p, kennungen);
+    // Die Antwort darf nicht beliebig groß werden – die nächstgelegenen genügen für bis zu 1000 Leads.
+    auswahl.schlange = auswahl.schlange.slice(0, MAX_KANDIDATEN);
+    // vollstaendig = false heißt: Für mehr Treffer kann der Browser mit höherem Bedarf noch einmal fragen.
+    return { zentrum, vollstaendig: kandidaten.vollstaendig && auswahl.schlange.length < MAX_KANDIDATEN, ...auswahl };
   }
 
   // Etappe 2: ein Paket Kandidaten prüfen (Website laden, Impressum auswerten, Filter anwenden).

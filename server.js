@@ -9,12 +9,12 @@ const { geocode, sucheUnternehmen } = require('./lib/osm');
 const { pruefeLeads, freieSuchen } = require('./lib/register');
 const { sendeAnSheets } = require('./lib/sheets');
 const CRM = require('./lib/crm');
-const { leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('./lib/suchlauf');
+const { MITTE, bedarfFuer, leseParameter, branchenFuer, waehleKandidaten, pruefeKandidat } = require('./lib/suchlauf');
 
 const PORT = +(process.argv.find((a) => a.startsWith('--port=')) || '').slice(7) || +process.env.PORT || 4310;
 const DATA = path.join(__dirname, 'data');
 const PUBLIC = path.join(__dirname, 'public');
-const PARALLEL = 8;
+const PARALLEL = 16; // gleichzeitig geprüfte Unternehmen (jedes auf einer anderen Website)
 
 fs.mkdirSync(DATA, { recursive: true });
 const lese = (datei, standard) => { try { return JSON.parse(fs.readFileSync(path.join(DATA, datei), 'utf8')); } catch { return standard; } };
@@ -23,7 +23,8 @@ const schreibe = (datei, daten) => fs.writeFileSync(path.join(DATA, datei), JSON
 let crm = lese('crm.json', []);
 let einstellungen = lese('einstellungen.json', { sheetsUrl: '' });
 let job = lese('letzte-suche.json', null);
-if (job) job.fertig = true;
+// Stand die letzte Suche beim Beenden noch mitten im Lauf (Fenster geschlossen, Absturz), bleiben ihre Treffer erhalten.
+if (job && !job.fertig) Object.assign(job, { fertig: true, meldung: 'Die Suche wurde unterbrochen – die bis dahin gefundenen Leads sind erhalten.' });
 crm.forEach(CRM.ergaenzePersonen);
 job?.leads.forEach(CRM.ergaenzePersonen);
 
@@ -31,37 +32,49 @@ let registerLauf = { laeuft: false, gesamt: 0, erledigt: 0, meldung: '', zaehler
 
 async function laufe(j) {
   const p = j.parameter;
-  const zentrum = await geocode(p.ort);
+  const zentrum = p.ort ? await geocode(p.ort) : MITTE;
   j.zentrum = zentrum.name;
   const branchen = branchenFuer(p.branchen, p.stichworte);
-  const kandidaten = await sucheUnternehmen(branchen, zentrum, p.radiusKm, (m) => (j.meldung = m), () => j.abbruch);
   const kennungen = p.ohneCrm ? CRM.kennungen(crm) : new Set();
-  const { schlange, ohneWebsite, schonImCrm } = waehleKandidaten(kandidaten, p, kennungen);
-  Object.assign(j, { kandidaten: schlange.length, ohneWebsite, schonImCrm, meldung: 'Websites und Impressen werden geprüft …' });
-  const hosts = new Set(schlange.map((k) => CRM.hostVon(k.website)).filter(Boolean));
-  let naechster = 0;
-  const arbeiter = async () => {
-    while (!j.abbruch && j.leads.length < p.anzahl && naechster < schlange.length) {
-      const r = await pruefeKandidat(schlange[naechster++], p, kennungen, hosts);
-      j.geprueft++;
-      if (r.websiteGefunden) j.websitesGefunden++;
-      if (r.grund === 'crm') j.schonImCrm++;
-      else if (r.grund) j.aussortiert[r.grund]++;
-      else if (j.leads.length < p.anzahl) j.leads.push(r.lead);
-    }
-  };
-  await Promise.all(Array.from({ length: PARALLEL }, arbeiter));
-  j.meldung = j.abbruch ? 'Suche gestoppt.' : j.leads.length >= p.anzahl ? 'Gewünschte Anzahl erreicht.' : 'Alle Unternehmen im Umkreis geprüft.';
+  const erledigt = new Set(), hosts = new Set();
+  let ausgeschoepft = false;
+  // Durchgänge: erst so viele Unternehmen sammeln, wie voraussichtlich nötig sind, und prüfen. Reicht das nicht für die
+  // gewünschte Lead-Zahl (strenge Filter, viele ohne Impressum), wird die dreifache Menge geholt – bis zum Rand des Umkreises.
+  for (let bedarf = bedarfFuer(p, crm.length); ; bedarf *= 3) {
+    const kandidaten = await sucheUnternehmen(branchen, zentrum, p.deutschland ? 0 : p.radiusKm, (m) => (j.meldung = m), () => j.abbruch, bedarf);
+    const { schlange, ohneWebsite, schonImCrm } = waehleKandidaten(kandidaten, p, kennungen);
+    const neu = schlange.filter((k) => !erledigt.has(k.id));
+    neu.forEach((k) => { erledigt.add(k.id); if (k.website) hosts.add(CRM.hostVon(k.website)); });
+    Object.assign(j, { kandidaten: erledigt.size, ohneWebsite, schonImCrm: schonImCrm + j.imCrmNachPruefung, meldung: 'Websites und Impressen werden geprüft …' });
+    let naechster = 0;
+    const arbeiter = async () => {
+      while (!j.abbruch && j.leads.length < p.anzahl && naechster < neu.length) {
+        const r = await pruefeKandidat(neu[naechster++], p, kennungen, hosts);
+        j.geprueft++;
+        if (r.websiteGefunden) j.websitesGefunden++;
+        if (r.grund === 'crm') { j.schonImCrm++; j.imCrmNachPruefung++; }
+        else if (r.grund) j.aussortiert[r.grund]++;
+        else if (j.leads.length < p.anzahl) j.leads.push(r.lead);
+      }
+    };
+    await Promise.all(Array.from({ length: PARALLEL }, arbeiter));
+    ausgeschoepft = kandidaten.vollstaendig || !neu.length;
+    if (j.abbruch || j.leads.length >= p.anzahl || ausgeschoepft) break;
+    j.meldung = 'Noch nicht genug Treffer – es werden weitere Unternehmen gesammelt …';
+  }
+  j.meldung = j.abbruch ? 'Suche gestoppt.' : j.leads.length >= p.anzahl ? 'Gewünschte Anzahl erreicht.' : p.deutschland ? 'Alle erreichbaren Unternehmen geprüft.' : 'Alle Unternehmen im Umkreis geprüft.';
 }
 
 function starteSuche(roh) {
   const p = leseParameter(roh);
   if (job && !job.fertig) job.abbruch = true;
-  const j = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0 }, fertig: false, fehler: '', abbruch: false, stand: 0 };
+  const j = { id: Date.now().toString(36), parameter: p, meldung: 'Ort wird gesucht …', zentrum: '', kandidaten: 0, ohneWebsite: 0, schonImCrm: 0, websitesGefunden: 0, geprueft: 0, imCrmNachPruefung: 0, leads: [], aussortiert: { sicherheit: 0, groesse: 0, fehler: 0, filter: 0 }, fertig: false, fehler: '', abbruch: false, stand: 0 };
   job = j;
+  // Zwischenstand alle paar Sekunden sichern, damit bei einem Abbruch nichts verloren geht.
+  const sicherung = setInterval(() => { if (job === j) schreibe('letzte-suche.json', j); }, 8000);
   laufe(j)
     .catch((e) => { j.fehler = e.message; j.meldung = ''; })
-    .finally(() => { j.fertig = true; if (job === j) schreibe('letzte-suche.json', j); });
+    .finally(() => { clearInterval(sicherung); j.fertig = true; if (job === j) schreibe('letzte-suche.json', j); });
   return j;
 }
 
@@ -113,7 +126,7 @@ async function api(req, pfad, url) {
   const post = req.method === 'POST';
   const k = post ? await leseKoerper(req) : {};
   if (pfad === '/api/modus') return { modus: 'lokal', register: true };
-  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, suche }) => ({ id, label, gruppe, suche }));
+  if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, gruppeLabel, suche }) => ({ id, label, gruppe, gruppeLabel, suche }));
   if (pfad === '/api/suche' && post) return { id: starteSuche(k).id };
   if (pfad === '/api/suche') {
     if (!job) return { leer: true };

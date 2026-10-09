@@ -91,6 +91,21 @@ td textarea { margin: 0; min-width: 180px; min-height: 34px; resize: vertical; f
 .leer { color: var(--blass); text-align: center; padding: 36px 10px; margin: 0; }
 
 #abmelden { margin: 0 0 0 auto; }
+.haken.stark { font-weight: 600; margin: 12px 0 10px; }
+details.gruppe { border-top: 1px solid var(--rand); }
+details.gruppe:last-child { border-bottom: 1px solid var(--rand); }
+details.gruppe summary { display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--blass); list-style: none; }
+details.gruppe summary::-webkit-details-marker { display: none; }
+details.gruppe summary::before { content: '▸'; font-size: 11px; }
+details.gruppe[open] summary::before { content: '▾'; }
+details.gruppe .g-zahl { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--akzent); }
+details.gruppe summary .mini { margin-left: auto; }
+details.gruppe .chips { padding-bottom: 10px; }
+#umkreis-zeile.aus { opacity: .4; }
+#branchen-gruppen.aus { opacity: .4; pointer-events: none; }
+.filterzeile { margin-top: -4px; font-size: 13px; }
+.filterzeile select { max-width: 230px; padding: 5px 8px; }
+.filterzeile .umschalter { padding: 4px 10px; font-size: 12.5px; font-weight: 500; }
 #branchen-suche { margin-top: 0; }
 #stichwort-neu { margin-top: 8px; white-space: normal; text-align: left; }
 #branchen-frei span::after { content: ' ×'; opacity: .6; }
