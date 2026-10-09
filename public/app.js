@@ -372,7 +372,7 @@ const formular = $('#suchformular');
 
 function leseFormular() {
   const f = new FormData(formular);
-  return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), deutschland: formular.deutschland.checked, anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: formular.alleBranchen.checked ? ['alle'] : f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked,
+  return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), deutschland: formular.deutschland.checked, anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: formular.alleBranchen.checked ? ['alle'] : f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked, websiteErraten: formular.websiteSuchen.checked,
     rechtsformen: f.getAll('rechtsform'), nurTelefon: formular.nurTelefon.checked, nurEmail: formular.nurEmail.checked, nurKarriere: formular.nurKarriere.checked };
 }
 
@@ -566,7 +566,8 @@ async function ladeBranchen() {
   if (gemerkt.minStatus) formular.minStatus.value = gemerkt.minStatus;
   if (gemerkt.maKlassen) $$('input[name=ma]').forEach((b) => (b.checked = gemerkt.maKlassen.includes(b.value)));
   if (gemerkt.ohneCrm === false) formular.ohneCrm.checked = false;
-  if (gemerkt.websiteSuchen) formular.websiteSuchen.checked = true;
+  // Früher war die Option standardmäßig aus; nur eine bewusste Abwahl seit der Umstellung zählt.
+  if (gemerkt.websiteErraten === false) formular.websiteSuchen.checked = false;
   for (const feld of ['nurTelefon', 'nurEmail', 'nurKarriere']) formular[feld].checked = gemerkt[feld] === true;
   formular.alleBranchen.checked = !!gemerkt.branchen?.includes('alle');
   formular.deutschland.checked = gemerkt.deutschland === true;
