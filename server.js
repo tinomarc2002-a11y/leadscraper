@@ -38,6 +38,7 @@ async function laufe(j) {
   const p = j.parameter;
   const zentrum = p.ort ? await geocode(p.ort) : MITTE;
   j.zentrum = zentrum.name;
+  j.zentrumPunkt = { lat: zentrum.lat, lon: zentrum.lon };
   const branchen = branchenFuer(p.branchen, p.stichworte);
   const kennungen = p.ohneCrm ? CRM.kennungen(crm) : new Set();
   const erledigt = new Set(), hosts = new Set();
@@ -69,8 +70,9 @@ async function laufe(j) {
   // Reicht die Karte nicht: weiter über die Liste aller .de-Adressen, die ein Branchenwort tragen. Bei sehr breiter
   // Auswahl wären das Hunderttausende Adressen – dort bleibt es bei der Karte.
   if (!j.abbruch && j.leads.length < p.anzahl && p.internet && branchen.length <= 30 && Internet.status().vorhanden) {
-    const stand = j.geprueft;
+    const stand = j.geprueft, vorher = j.kandidaten;
     const r = await Internet.suche({
+      stand: (erledigt, gesamt) => { j.geprueft = stand + erledigt; j.kandidaten = vorher + gesamt; },
       branchen, zentrum, radiusKm: p.deutschland ? 0 : p.radiusKm, ortName: p.ort, bekannteHosts: hosts,
       melde: (m) => { j.meldung = m; },
       weiter: () => !j.abbruch && j.leads.length < p.anzahl,
@@ -86,8 +88,6 @@ async function laufe(j) {
         else if (j.leads.length < p.anzahl) { j.leads.push(lead); j.ausInternet++; }
       },
     });
-    j.geprueft = stand + r.erledigt;
-    j.kandidaten += r.gesamt;
     ausgeschoepft = r.ausgeschoepft;
   }
   j.meldung = j.abbruch ? 'Suche gestoppt.' : j.leads.length >= p.anzahl ? 'Gewünschte Anzahl erreicht.' : p.deutschland ? 'Alle erreichbaren Unternehmen geprüft.' : 'Alle Unternehmen im Umkreis geprüft.';

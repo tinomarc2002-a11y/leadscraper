@@ -168,6 +168,7 @@ function zeichne(name) {
     </tr></thead><tbody>${liste.map((l) => zeileHtml(l, name)).join('')}</tbody>`;
   const gewaehlt = liste.filter((l) => a.auswahl.has(l.id)).length;
   $('#leiste-' + name + ' .anzahl').textContent = gewaehlt ? `${gewaehlt} von ${liste.length} ausgewählt` : `${liste.length} Leads`;
+  if (name === 'suche') zeichnePins();
   if (name === 'crm') {
     const faellig = a.leads.filter(istFaellig).length;
     $('#crm-zaehler').textContent = a.leads.length;
@@ -385,6 +386,10 @@ function zeigeFortschritt(d) {
   $('#fortschritt-zahlen').textContent = d.kandidaten ? `${d.geprueft} von ${d.kandidaten} Unternehmen geprüft · ${d.gesamt} Treffer` : '';
   const anteil = d.fertig ? 1 : Math.max(d.gesamt / d.parameter.anzahl, d.kandidaten ? d.geprueft / d.kandidaten : 0.02);
   $('#balken-fuellung').style.width = Math.round(Math.min(1, anteil) * 100) + '%';
+  $('#balken').classList.toggle('laeuft', laeuft);
+  // Solange nur gesammelt wird, gibt es noch nichts zu zählen – dann wandert der Balken ohne Füllstand.
+  $('#balken').classList.toggle('unbestimmt', laeuft && (!d.kandidaten || d.geprueft >= d.kandidaten) && d.gesamt < d.parameter.anzahl);
+  if (d.zentrumPunkt && (suchMitte?.lat !== d.zentrumPunkt.lat || suchMitte?.lon !== d.zentrumPunkt.lon)) { suchMitte = d.zentrumPunkt; if (!ortMitte) zeigeGebiet(); }
   const teile = [d.fehler || d.meldung];
   if (d.zentrum) teile.push(d.parameter.deutschland ? `Ganz Deutschland, nächstgelegene zuerst ab ${d.zentrum.split(',').slice(0, 2).join(',')}.` : `Umkreis ${d.parameter.radiusKm} km um ${d.zentrum.split(',').slice(0, 2).join(',')}.`);
   const aus = d.aussortiert;
@@ -457,6 +462,7 @@ async function starteCloudSuche(p) {
         const r = await api('/api/kandidaten', { bedarf, parameter: p, branchen: teil.filter((x) => x.branche).map((x) => x.branche), stichworte: teil.filter((x) => x.wort).map((x) => x.wort), zentrum });
         zentrum = r.zentrum;
         c.zentrum = zentrum.name;
+        c.zentrumPunkt = { lat: zentrum.lat, lon: zentrum.lon };
         ohneWebsite += r.ohneWebsite;
         imCrm += r.schonImCrm;
         if (!r.vollstaendig) ausgeschoepft = false;
@@ -509,7 +515,7 @@ function ladeGemerkteCloudSuche() {
 formular.addEventListener('submit', versuche(async (e) => {
   e.preventDefault();
   const p = leseFormular();
-  localStorage.setItem('leadscraper-formular', JSON.stringify(p));
+  localStorage.setItem('leadscraper-formular', JSON.stringify({ ...p, mitte: ortMitte }));
   if (MODUS.modus === 'cloud') return starteCloudSuche(p);
   await api('/api/suche', p);
   await holeStand();
@@ -518,14 +524,15 @@ $('#stopp').addEventListener('click', versuche(async () => {
   if (MODUS.modus === 'cloud') { if (cloudSuche) cloudSuche.abbruch = true; return; }
   await api('/api/suche/stop', {});
 }));
-formular.radiusKm.addEventListener('input', (e) => ($('#radius-wert').textContent = e.target.value));
+formular.radiusKm.addEventListener('input', (e) => { $('#radius-wert').textContent = e.target.value; zeigeGebiet(); });
 // „Ganz Deutschland“ setzt den Umkreis außer Kraft; ein Ort ist dann nur noch der Startpunkt und darf fehlen.
 function zeigeDeutschland() {
   const an = formular.deutschland.checked;
   formular.radiusKm.disabled = an;
   formular.ort.required = !an;
-  formular.ort.placeholder = an ? 'Startpunkt, z. B. Augsburg (leer = Mitte Deutschlands)' : 'z. B. Augsburg oder 86150';
+  formular.ort.placeholder = an ? 'Startpunkt (leer = Mitte Deutschlands)' : 'Stadt oder PLZ';
   $('#umkreis-zeile').classList.toggle('aus', an);
+  zeigeGebiet();
 }
 formular.deutschland.addEventListener('change', zeigeDeutschland);
 // „alle / keine“ einer Gruppe – wirkt nur auf die Branchen, die die Suchzeile gerade zeigt.
@@ -562,6 +569,8 @@ async function ladeBranchen() {
   }).join('');
   $('#rechtsformen').innerHTML = RECHTSFORM_GRUPPEN.map(([id, text]) => `<label><input type="checkbox" name="rechtsform" value="${id}" ${!gemerkt.rechtsformen || gemerkt.rechtsformen.includes(id) ? 'checked' : ''}><span>${esc(text)}</span></label>`).join('');
   if (gemerkt.ort) formular.ort.value = gemerkt.ort;
+  if (gemerkt.mitte && gemerkt.mitte.name === gemerkt.ort) ortMitte = gemerkt.mitte;
+  $('#schnell-branchen').innerHTML = BELIEBT.map((id) => branchen.find((b) => b.id === id)).filter(Boolean).map((b) => `<button type="button" class="schnell-knopf" data-id="${esc(b.id)}" title="${esc(b.label)}">${esc(b.label.split(/,| &/)[0])}</button>`).join('');
   if (gemerkt.radiusKm) { formular.radiusKm.value = gemerkt.radiusKm; $('#radius-wert').textContent = gemerkt.radiusKm; }
   if (gemerkt.anzahl) formular.anzahl.value = gemerkt.anzahl;
   if (gemerkt.minStatus) formular.minStatus.value = gemerkt.minStatus;
@@ -578,44 +587,135 @@ async function ladeBranchen() {
   zeigeAuswahlAnzahl();
 }
 
+// ───────── Vorschlagslisten (Branche und Ort) ─────────
+// Eine Liste unter dem Eingabefeld: mit Pfeiltasten und Enter oder per Klick wählbar.
+function vorschlagsliste(feld, liste, waehle) {
+  let eintraege = [], aktiv = -1;
+  const zu = () => { liste.hidden = true; feld.setAttribute('aria-expanded', 'false'); aktiv = -1; };
+  const markiere = () => [...liste.children].forEach((li, i) => li.classList.toggle('aktiv', i === aktiv));
+  const nimm = (i) => { const e = eintraege[i]; zu(); if (e) waehle(e); };
+  liste.addEventListener('mousedown', (e) => {
+    const li = e.target.closest('li');
+    if (!li) return;
+    e.preventDefault(); // das Feld soll den Fokus behalten
+    nimm([...liste.children].indexOf(li));
+  });
+  feld.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') return zu();
+    if (liste.hidden || !eintraege.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      aktiv = (aktiv + (e.key === 'ArrowDown' ? 1 : -1) + eintraege.length) % eintraege.length;
+      markiere();
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // Enter wählt den Vorschlag und startet nicht die Suche
+      e.stopImmediatePropagation();
+      nimm(Math.max(aktiv, 0));
+    }
+  });
+  feld.addEventListener('blur', () => setTimeout(zu, 120));
+  return {
+    zu,
+    zeige(neue) {
+      eintraege = neue;
+      aktiv = -1;
+      liste.innerHTML = neue.map((e) => `<li role="option">${e.html}</li>`).join('');
+      liste.hidden = !neue.length;
+      feld.setAttribute('aria-expanded', String(!!neue.length));
+    },
+  };
+}
+
 // ───────── Branchen-Suchzeile ─────────
-// Tippen blendet die passenden Katalogbranchen ein. Was der Katalog nicht kennt, lässt sich als eigenes
+// Tippen schlägt die passenden Katalogbranchen vor. Was der Katalog nicht kennt, lässt sich als eigenes
 // Stichwort aufnehmen – die Suche findet dann Firmen, die dieses Wort im Namen tragen.
 const suchfeld = $('#branchen-suche');
+const BELIEBT = ['solar', 'kuechen', 'autohaus', 'immobilien', 'fenster', 'shk', 'dach', 'zahnarzt', 'pflege'];
+
+const branchenVorschlaege = vorschlagsliste(suchfeld, $('#branchen-vorschlaege'), (e) => {
+  if (e.stichwort) return fuegeStichwortHinzu(e.stichwort);
+  e.box.checked = true;
+  suchfeld.value = '';
+  filtereBranchen();
+  zeigeAuswahlAnzahl();
+});
 
 function filtereBranchen() {
   const worte = suchfeld.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  let treffer = 0;
+  const treffer = [];
   for (const gruppe of $$('#branchen-gruppen details')) {
     let sichtbar = 0;
     for (const label of $('.chips', gruppe).children) {
-      const passt = worte.every((w) => label.firstElementChild.dataset.suche.includes(w));
+      const box = label.firstElementChild;
+      const passt = worte.every((w) => box.dataset.suche.includes(w));
       label.hidden = !passt;
-      if (passt) sichtbar++;
+      if (passt) { sichtbar++; if (worte.length && !box.checked) treffer.push({ box, name: label.textContent, gruppe: $('summary span', gruppe).textContent }); }
     }
     // Beim Suchen klappen die Gruppen mit Treffern auf; ohne Suchtext gilt wieder der Ausgangszustand.
     gruppe.hidden = !sichtbar;
     gruppe.open = worte.length ? sichtbar > 0 : !!gruppe.dataset.offen || !!$('input:checked', gruppe);
-    treffer += sichtbar;
   }
   const eingabe = suchfeld.value.trim().replace(/\s+/g, ' ');
-  const knopf = $('#stichwort-neu');
-  knopf.hidden = eingabe.length < 3;
-  knopf.textContent = `+ „${eingabe}“ als eigenes Stichwort suchen`;
-  const hinweis = $('#branchen-hinweis');
-  hinweis.hidden = treffer > 0;
-  hinweis.textContent = 'Keine passende Branche im Katalog.' + (eingabe.length >= 3 ? ' Als eigenes Stichwort findet die Suche Firmen, die das Wort im Namen tragen.' : '');
+  // Treffer, die mit der Eingabe beginnen, zuerst
+  const beginnt = (t) => (t.name.toLowerCase().startsWith(worte[0]) ? 0 : 1);
+  const eintraege = treffer.sort((x, y) => beginnt(x) - beginnt(y)).slice(0, 8).map((t) => ({ ...t, html: `<span>${esc(t.name)}</span><span class="unter">${esc(t.gruppe)}</span>` }));
+  if (eingabe.length >= 3) eintraege.push({ stichwort: eingabe, html: `<span>+ „${esc(eingabe)}“ als eigenes Stichwort</span><span class="unter">findet Firmen mit dem Wort im Namen</span>` });
+  if (document.activeElement === suchfeld) branchenVorschlaege.zeige(eintraege); else branchenVorschlaege.zu();
+}
+
+// Die Auswahl als Marken in der Suchzeile – ein Klick entfernt die Branche wieder.
+function zeigeMarken() {
+  const alle = formular.alleBranchen.checked;
+  const marke = (art, wert, text) => `<button type="button" class="marke-knopf" data-art="${art}" data-wert="${esc(wert)}" title="Entfernen">${esc(text)}<span aria-hidden="true"> ×</span></button>`;
+  const gewaehlt = alle ? [] : $$('input[name=branche]:checked');
+  const zeigen = gewaehlt.slice(0, 6);
+  $('#auswahl-marken').innerHTML = (alle ? marke('alle', '', 'Alle Branchen') : zeigen.map((b) => marke('branche', b.value, b.parentElement.textContent)).join('')) +
+    $$('input[name=stichwort]:checked').map((b) => marke('stichwort', b.value, '„' + b.value + '“')).join('') +
+    (gewaehlt.length > zeigen.length ? `<button type="button" class="marke-knopf mehr" data-art="mehr">+ ${gewaehlt.length - zeigen.length} weitere</button>` : '');
+  suchfeld.placeholder = $('#auswahl-marken').children.length ? 'weitere Branche …' : 'Branche eintippen, z. B. Solar, Zahnarzt, Küchen …';
+  for (const k of $$('#schnell-branchen button')) k.classList.toggle('aktiv', !alle && !!$(`input[name=branche][value="${k.dataset.id}"]`)?.checked);
+}
+$('#auswahl-marken').addEventListener('click', (e) => {
+  const k = e.target.closest('button');
+  if (!k) return;
+  if (k.dataset.art === 'mehr') { $('#katalog').open = true; return; }
+  if (k.dataset.art === 'alle') formular.alleBranchen.checked = false;
+  else {
+    const box = $$(`input[name=${k.dataset.art}]`).find((b) => b.value === k.dataset.wert);
+    if (box) { box.checked = false; if (k.dataset.art === 'stichwort') box.parentElement.remove(); }
+    $('#gruppe-frei').hidden = !$('#branchen-frei').children.length;
+  }
+  zeigeAuswahlAnzahl();
+});
+// Klick irgendwo in den Rahmen setzt den Cursor ins Suchfeld.
+$('#was-rahmen').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.id === 'auswahl-marken') suchfeld.focus(); });
+$('#schnell-branchen').addEventListener('click', (e) => {
+  const box = e.target.dataset.id && $(`input[name=branche][value="${e.target.dataset.id}"]`);
+  if (!box) return;
+  formular.alleBranchen.checked = false;
+  box.checked = !box.checked;
+  zeigeAuswahlAnzahl();
+});
+
+// Wie viele der weiteren Filter vom Standard abweichen – steht neben „Weitere Filter“.
+function zeigeFilterAnzahl() {
+  const n = [formular.minStatus.value !== 'impressum', $$('input[name=ma]').some((b) => !b.checked), $$('input[name=rechtsform]').some((b) => !b.checked),
+    formular.nurTelefon.checked, formular.nurEmail.checked, formular.nurKarriere.checked, !formular.ohneCrm.checked, !formular.websiteSuchen.checked,
+    !$('#internet-zeile').hidden && !formular.internet.checked].filter(Boolean).length;
+  $('#filter-anzahl').textContent = n ? `${n} aktiv` : '';
 }
 
 function zeigeAuswahlAnzahl() {
   const alle = formular.alleBranchen.checked;
   const n = $$('input[name=branche]:checked').length, eigene = $$('input[name=stichwort]:checked').length;
-  $('#branchen-anzahl').textContent = alle ? 'alle' + (eigene ? ` + ${eigene} Stichwort` : '') : n + eigene ? `${n + eigene} ausgewählt` : '';
+  $('#branchen-anzahl').textContent = alle ? '(alle gewählt)' : n + eigene ? `(${n + eigene} ausgewählt)` : '';
   $('#branchen-gruppen').classList.toggle('aus', alle);
   for (const gruppe of $$('#branchen-gruppen details')) {
     const gewaehlt = $$('input:checked', gruppe).length;
     $('.g-zahl', gruppe).textContent = gewaehlt ? `${gewaehlt} von ${$$('input', gruppe).length}` : '';
   }
+  zeigeMarken();
+  zeigeFilterAnzahl();
 }
 
 function fuegeStichwortHinzu(wort) {
@@ -633,21 +733,141 @@ function fuegeStichwortHinzu(wort) {
 }
 
 suchfeld.addEventListener('input', filtereBranchen);
+suchfeld.addEventListener('focus', filtereBranchen);
 suchfeld.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  e.preventDefault(); // Enter soll hier nicht die ganze Suche starten
-  const sichtbar = $$('input[name=branche]').filter((b) => !b.parentElement.hidden);
-  if (!suchfeld.value.trim()) return;
-  if (sichtbar.length === 1) { sichtbar[0].checked = true; suchfeld.value = ''; filtereBranchen(); zeigeAuswahlAnzahl(); }
-  else if (!sichtbar.length) fuegeStichwortHinzu(suchfeld.value);
+  // Enter ohne Vorschlag soll nicht die ganze Suche starten; Rücktaste im leeren Feld entfernt die letzte Marke.
+  if (e.key === 'Enter' && suchfeld.value.trim()) e.preventDefault();
+  if (e.key === 'Backspace' && !suchfeld.value) $$('#auswahl-marken button:not(.mehr)').pop()?.click();
 });
-$('#stichwort-neu').addEventListener('click', () => fuegeStichwortHinzu(suchfeld.value));
 // Ein abgewähltes eigenes Stichwort verschwindet ganz.
 $('#branchen-frei').addEventListener('change', (e) => {
   if (!e.target.checked) e.target.parentElement.remove();
   $('#gruppe-frei').hidden = !$('#branchen-frei').children.length;
 });
 formular.addEventListener('change', zeigeAuswahlAnzahl);
+
+// ───────── Ort: Vorschläge, Schnellwahl und Karte ─────────
+// Ortsvorschläge und Karte kommen von OpenStreetMap (Photon und Leaflet) – kostenlos und ohne Schlüssel.
+const PHOTON = 'https://photon.komoot.io';
+const DE_RAHMEN = '5.87,47.27,15.04,55.06';
+const STAEDTE = [['Berlin', 52.52, 13.405], ['Hamburg', 53.551, 9.994], ['München', 48.137, 11.575], ['Köln', 50.938, 6.96], ['Frankfurt am Main', 50.11, 8.682], ['Stuttgart', 48.778, 9.18],
+  ['Düsseldorf', 51.227, 6.773], ['Leipzig', 51.34, 12.375], ['Dresden', 51.05, 13.738], ['Nürnberg', 49.452, 11.077], ['Hannover', 52.375, 9.732], ['Bremen', 53.079, 8.801]];
+const ortFeld = formular.ort;
+let ortMitte = null; // { lat, lon, name } zum Text im Ortsfeld, sobald bekannt
+let ortAbruf = null, ortTimer = null;
+
+async function frageOrte(text, anzahl = 6) {
+  ortAbruf?.abort();
+  ortAbruf = new AbortController();
+  // Postleitzahlen kennt Photon nur ohne die Einschränkung auf Orte.
+  const nurOrte = /^\d/.test(text) ? '' : '&layer=city';
+  const r = await fetch(`${PHOTON}/api/?q=${encodeURIComponent(text)}&lang=de&limit=${anzahl}${nurOrte}&bbox=${DE_RAHMEN}`, { signal: ortAbruf.signal });
+  const gesehen = new Set();
+  return ((await r.json()).features || []).filter((f) => f.properties.countrycode === 'DE').map((f) => {
+    const p = f.properties, name = p.name || p.city || p.postcode || text;
+    return { name, land: p.state || '', lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+  }).filter((o) => !gesehen.has(o.name + o.land) && gesehen.add(o.name + o.land));
+}
+
+function setzeOrt(o, schwenk = true) {
+  // Gleichnamige Orte: das Bundesland macht die Angabe für die Suche eindeutig.
+  ortFeld.value = o.eindeutig === false && o.land ? `${o.name}, ${o.land}` : o.name;
+  ortMitte = { lat: o.lat, lon: o.lon, name: ortFeld.value };
+  zeigeGebiet(schwenk);
+}
+
+const ortVorschlaege = vorschlagsliste(ortFeld, $('#ort-vorschlaege'), (o) => setzeOrt(o));
+ortFeld.addEventListener('input', () => {
+  clearTimeout(ortTimer);
+  ortMitte = null;
+  const text = ortFeld.value.trim();
+  if (text.length < 2 || /^\d{1,5}$/.test(text)) return ortVorschlaege.zu();
+  ortTimer = setTimeout(async () => {
+    try {
+      const orte = await frageOrte(text);
+      const namen = orte.map((o) => o.name);
+      if (document.activeElement === ortFeld && ortFeld.value.trim() === text) ortVorschlaege.zeige(orte.map((o) => ({ ...o, eindeutig: namen.filter((n) => n === o.name).length === 1, html: `<span>${esc(o.name)}</span><span class="unter">${esc(o.land)}</span>` })));
+    } catch {} // abgebrochen oder Dienst nicht erreichbar: dann eben ohne Vorschläge
+  }, 300);
+});
+// Ohne gewählten Vorschlag (frei getippt, Postleitzahl): den Ort für die Karte nachschlagen.
+ortFeld.addEventListener('change', async () => {
+  const text = ortFeld.value.trim();
+  if (!text || ortMitte?.name === text) return zeigeGebiet();
+  try { const [o] = await frageOrte(text, 1); if (o && ortFeld.value.trim() === text) { ortMitte = { lat: o.lat, lon: o.lon, name: text }; zeigeGebiet(); } } catch {}
+});
+$('#schnell-orte').innerHTML = STAEDTE.map(([name], i) => `<button type="button" class="schnell-knopf" data-nr="${i}">${esc(name)}</button>`).join('');
+$('#schnell-orte').addEventListener('click', (e) => {
+  const s = STAEDTE[e.target.dataset.nr];
+  if (s) setzeOrt({ name: s[0], lat: s[1], lon: s[2] });
+});
+
+// Die Karte: Kreis = Suchgebiet, Punkte = Treffer. Lädt die Kartenbibliothek nach; klappt das nicht, bleibt die Spalte weg.
+let karte = null, gebiet = null, pins = null, suchMitte = null, pinsEingepasst = -1;
+const DE_GRENZEN = [[47.27, 5.87], [55.06, 15.04]];
+const PIN_FARBE = { register: '#12805c', bestaetigt: '#12805c', impressum: '#1f5fbf', pruefen: '#9a6700', unbekannt: '#5d6577' };
+
+function ladeKarte() {
+  const skript = document.createElement('script');
+  skript.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  skript.crossOrigin = 'anonymous';
+  skript.onerror = () => { $('#kartenspalte').hidden = true; $('.zweispaltig').classList.add('ohne-karte'); };
+  skript.onload = () => {
+    karte = L.map('karte', { zoomControl: true, attributionControl: true }).fitBounds(DE_GRENZEN);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(karte);
+    gebiet = L.layerGroup().addTo(karte);
+    pins = L.layerGroup().addTo(karte);
+    karte.on('click', versuche(async (e) => {
+      // Der nächstgelegene Ort zum Klick wird zum Suchort.
+      const r = await fetch(`${PHOTON}/reverse?lat=${e.latlng.lat.toFixed(5)}&lon=${e.latlng.lng.toFixed(5)}&lang=de&layer=city&radius=30`);
+      const f = ((await r.json()).features || [])[0];
+      if (!f || f.properties.countrycode !== 'DE') return melde('Hier liegt kein Ort in Deutschland.');
+      setzeOrt({ name: f.properties.name, land: f.properties.state, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }, false);
+    }));
+    // Ändert sich die Größe der Kartenfläche (Fenster, aufgeklappte Filter), muss die Karte neu vermessen werden.
+    new ResizeObserver(() => karte.invalidateSize()).observe($('#karte'));
+    karte.invalidateSize();
+    zeigeGebiet();
+    zeichnePins();
+  };
+  document.head.append(skript);
+}
+
+// Zeichnet das Suchgebiet zum Formular: Kreis um den Ort oder – bei „Ganz Deutschland“ – das ganze Land.
+function zeigeGebiet(schwenk = true) {
+  if (!karte) return;
+  gebiet.clearLayers();
+  const mitte = ortMitte || suchMitte;
+  const land = formular.deutschland.checked;
+  if (mitte) L.circleMarker([mitte.lat, mitte.lon], { radius: 5, color: '#3b4fd8', fillColor: '#3b4fd8', fillOpacity: 1, interactive: false }).addTo(gebiet);
+  if (land || !mitte) { if (schwenk) karte.fitBounds(DE_GRENZEN); return; }
+  const kreis = L.circle([mitte.lat, mitte.lon], { radius: +formular.radiusKm.value * 1000, color: '#3b4fd8', weight: 2, fillColor: '#3b4fd8', fillOpacity: 0.08, interactive: false }).addTo(gebiet);
+  if (schwenk) karte.fitBounds(kreis.getBounds(), { padding: [12, 12] });
+}
+
+function zeichnePins() {
+  if (!karte) return;
+  pins.clearLayers();
+  const liste = sichtbare('suche').filter((l) => Number.isFinite(l.lat) && Number.isFinite(l.lon));
+  for (const l of liste) {
+    const farbe = PIN_FARBE[l.status] || PIN_FARBE.unbekannt;
+    L.circleMarker([l.lat, l.lon], { radius: 6, color: '#fff', weight: 1.5, fillColor: farbe, fillOpacity: 0.95 })
+      .bindTooltip(`<strong>${esc(l.name)}</strong>${l.inhaber ? '<br>' + esc([l.anrede, l.inhaber].filter(Boolean).join(' ')) : ''}<br>${esc([l.plz, l.ort].filter(Boolean).join(' '))}`)
+      .on('click', (e) => {
+        L.DomEvent.stopPropagation(e); // nicht als Ortswahl werten
+        const zeile = $$('#tabelle-suche tbody tr').find((tr) => tr.dataset.id === l.id);
+        if (!zeile) return;
+        zeile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        zeile.classList.add('hervor');
+        setTimeout(() => zeile.classList.remove('hervor'), 2200);
+      }).addTo(pins);
+  }
+  // Bundesweit gibt es keinen Kreis – dann auf die Treffer zoomen.
+  // Nur wenn Treffer dazugekommen sind – sonst würde jeder Klick in der Tabelle den Ausschnitt zurücksetzen.
+  const einpassen = liste.length !== pinsEingepasst;
+  pinsEingepasst = liste.length;
+  if (einpassen && liste.length && (formular.deutschland.checked || !(ortMitte || suchMitte))) karte.fitBounds(L.latLngBounds(liste.map((l) => [l.lat, l.lon])), { padding: [24, 24], maxZoom: 11 });
+}
 
 // ───────── CRM & Google Sheets ─────────
 async function ladeCrm() {
@@ -736,6 +956,8 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   await ladeCrm();
   $('#sheets-url').value = (await api('/api/einstellungen')).sheetsUrl || '';
   await zeigeInternetStand();
+  zeigeFilterAnzahl();
+  ladeKarte();
   if (cloud) { zeichne('suche'); return ladeGemerkteCloudSuche(); }
   await holeStand();
   zeichne('suche');
