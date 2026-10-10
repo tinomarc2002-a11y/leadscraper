@@ -14,6 +14,7 @@
       <button class="aktiv" data-reiter="suche">Suche</button>
       <button data-reiter="crm">CRM <span class="zaehler" id="crm-zaehler">0</span><span class="zaehler faellig" id="crm-faellig" title="Heute fällige Wiedervorlagen" hidden>0</span></button>
       <button data-reiter="sheets">Google Sheets</button>
+      <button data-reiter="datenbank" id="reiter-knopf-datenbank" hidden>Datenbank <span class="zaehler" id="db-zaehler">0</span></button>
     </nav>
     <button type="button" class="neben klein-knopf" id="abmelden" hidden>Abmelden</button>
   </header>
@@ -169,6 +170,25 @@
         </div>
         <p class="klein" id="sheets-status"></p>
         <p class="klein">Hinweis: Wer die URL kennt, kann Zeilen in diese eine Tabelle schreiben – also nicht weitergeben. Alternativ funktionieren immer „CSV herunterladen“ und „Für Sheets kopieren“ (dann in der Tabelle mit Strg+V einfügen).</p>
+      </div>
+    </section>
+
+    <!-- ───────── Datenbank ───────── -->
+    <section id="reiter-datenbank" hidden>
+      <div class="karte text">
+        <h2>Firmen-Datenbank</h2>
+        <p>Hier prüft die Anwendung im Hintergrund alle deutschen Internet-Adressen der Branchen, die hochpreisig verkaufen oder viel Personal brauchen, und merkt sich jede Firma mit Inhaber, Kontakt und Standort. Jede spätere Suche findet diese Firmen dann sofort.</p>
+        <div class="kennzahlen">
+          <div><strong id="db-firmen">0</strong><span>Firmen in der Datenbank</span></div>
+          <div><strong id="db-sicher">0</strong><span>davon mit sicherem Inhaber</span></div>
+          <div><strong id="db-adressen">0</strong><span>Adressen geprüft</span></div>
+        </div>
+        <div class="balken" id="db-balken"><div id="db-fuellung"></div></div>
+        <p class="klein" id="db-stand"></p>
+        <div class="zeile">
+          <button type="button" class="haupt" id="db-start">Aufbau starten</button>
+        </div>
+        <p class="klein">Der Aufbau dauert insgesamt etwa einen Tag reine Laufzeit und lastet den Internetanschluss spürbar aus. Du kannst jederzeit pausieren und später weitermachen – nichts geht verloren. Der PC muss dabei an sein und dieses Programm laufen; während einer Suche pausiert der Aufbau von selbst.</p>
       </div>
     </section>
   </main>

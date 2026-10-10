@@ -76,7 +76,7 @@ const versuche = (fn) => async (...a) => { try { await fn(...a); } catch (e) { m
 // ───────── Reiter ─────────
 function zeigeReiter(name) {
   $$('.reiter button').forEach((b) => b.classList.toggle('aktiv', b.dataset.reiter === name));
-  for (const r of ['suche', 'crm', 'sheets']) $('#reiter-' + r).hidden = r !== name;
+  for (const r of ['suche', 'crm', 'sheets', 'datenbank']) $('#reiter-' + r).hidden = r !== name;
 }
 $$('.reiter button').forEach((b) => b.addEventListener('click', () => zeigeReiter(b.dataset.reiter)));
 
@@ -941,6 +941,34 @@ $('#internet-einrichten').addEventListener('click', versuche(async () => {
   await zeigeInternetStand();
 }));
 
+// ───────── Firmen-Datenbank (nur lokale Version) ─────────
+const zahlDe = (n) => Math.round(n).toLocaleString('de-DE');
+async function zeigeDatenbank() {
+  if (!MODUS.internet) return;
+  const d = await api('/api/datenbank');
+  $('#reiter-knopf-datenbank').hidden = false;
+  $('#db-zaehler').textContent = d.zahl.firmen >= 1000 ? Math.floor(d.zahl.firmen / 1000) + ' Tsd.' : d.zahl.firmen;
+  $('#db-firmen').textContent = zahlDe(d.zahl.firmen);
+  $('#db-sicher').textContent = zahlDe(d.zahl.sicher);
+  $('#db-adressen').textContent = zahlDe(d.zahl.adressen);
+  const arbeitet = d.laeuft && !d.pausiertWegenSuche;
+  $('#db-balken').classList.toggle('laeuft', arbeitet);
+  $('#db-fuellung').style.width = (d.gesamt ? Math.round((d.erledigt / d.gesamt) * 1000) / 10 : 0) + '%';
+  $('#db-start').textContent = d.an ? 'Pausieren' : d.zahl.adressen > 1000 ? 'Aufbau fortsetzen' : 'Aufbau starten';
+  $('#db-start').dataset.an = d.an ? '' : '1';
+  const rest = d.gesamt - d.erledigt;
+  const stunden = d.jeSekunde > 0.5 ? rest / d.jeSekunde / 3600 : 0;
+  $('#db-stand').textContent = d.pausiertWegenSuche ? 'Pausiert, solange die Suche läuft.'
+    : arbeitet && d.gesamt ? `${zahlDe(d.erledigt)} von ${zahlDe(d.gesamt)} Adressen geprüft` + (stunden ? ` · noch etwa ${stunden >= 1.5 ? Math.round(stunden) + ' Stunden' : Math.max(1, Math.round(stunden * 60)) + ' Minuten'}` : ' · Adressen werden herausgesucht …')
+    : d.an ? 'Wird gestartet …' : d.meldung || (d.zahl.adressen > 1000 ? 'Pausiert.' : 'Noch nicht gestartet.');
+  setTimeout(versuche(zeigeDatenbank), d.an ? 2000 : 15000);
+}
+$('#db-start').addEventListener('click', versuche(async (e) => {
+  await api('/api/datenbank', { an: !!e.target.dataset.an });
+  e.target.textContent = e.target.dataset.an ? 'Pausieren' : 'Aufbau fortsetzen';
+  e.target.dataset.an = e.target.dataset.an ? '' : '1';
+}));
+
 $('#anmelde-dialog').addEventListener('cancel', (e) => e.preventDefault());
 $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWORT_MERKER); location.reload(); });
 
@@ -958,6 +986,7 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   await zeigeInternetStand();
   zeigeFilterAnzahl();
   ladeKarte();
+  zeigeDatenbank().catch(() => {});
   if (cloud) { zeichne('suche'); return ladeGemerkteCloudSuche(); }
   await holeStand();
   zeichne('suche');

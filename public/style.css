@@ -219,3 +219,12 @@ tr.hervor td { background: var(--akzent-hell); transition: background .3s; }
   .kopf { gap: 12px; padding: 0 12px; }
   main { padding: 12px 12px 60px; }
 }
+
+/* ───────── Datenbank ───────── */
+.kennzahlen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0 6px; }
+.kennzahlen div { border: 1px solid var(--rand); border-radius: 9px; padding: 12px 14px; }
+.kennzahlen strong { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+.kennzahlen span { color: var(--blass); font-size: 12.5px; }
+#db-fuellung { height: 100%; width: 0; background-color: var(--akzent); border-radius: 4px; transition: width .9s ease-out; }
+.balken.laeuft #db-fuellung { background-image: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, .45) 50%, transparent 65%); background-size: 220% 100%; animation: glanz 1.5s linear infinite; }
+@media (max-width: 700px) { .kennzahlen { grid-template-columns: 1fr; } }

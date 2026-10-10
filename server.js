@@ -34,6 +34,47 @@ job?.leads.forEach(CRM.ergaenzePersonen);
 
 let registerLauf = { laeuft: false, gesamt: 0, erledigt: 0, meldung: '', zaehler: {}, abbruch: false };
 
+// ───────── Firmen-Datenbank ─────────
+// Prüft im Hintergrund alle .de-Adressen vor, die ein Branchenwort tragen – allen voran hochpreisige Produkte und Personalbedarf.
+// Spätere Suchen finden diese Firmen sofort. Der Aufbau pausiert, solange eine Suche arbeitet (sonst wäre der
+// Internetanschluss überlastet), und macht nach einem Neustart dort weiter, wo er aufgehört hat.
+// Die beiden Schwerpunkt-Gruppen stehen vorn: Trägt eine Adresse Wörter mehrerer Branchen, zählt die erste.
+const SCHWERPUNKT = (b) => (['hochpreis', 'personal'].includes(b.gruppe) ? 0 : 1);
+const DB_BRANCHEN = BRANCHEN.filter((b) => b.gruppe).sort((x, y) => SCHWERPUNKT(x) - SCHWERPUNKT(y));
+const datenbank = { an: lese('datenbank.json', { an: false }).an === true, laeuft: false, erledigt: 0, gesamt: 0, meldung: '', jeSekunde: 0, zahl: { adressen: 0, firmen: 0, sicher: 0 } };
+const sucheAktiv = () => !!job && !job.fertig;
+async function baueDatenbank() {
+  if (datenbank.laeuft || !datenbank.an || sucheAktiv() || !Internet.status().vorhanden) return;
+  datenbank.laeuft = true;
+  const messpunkte = []; // [Zeit, erledigt] der letzten Minute, für Tempo und Restzeit
+  try {
+    const r = await Internet.suche({
+      branchen: DB_BRANCHEN, zentrum: MITTE, radiusKm: 0, ortName: '', bekannteHosts: [],
+      melde: () => {}, nimm: () => {},
+      weiter: () => datenbank.an && !sucheAktiv(),
+      stand: (erledigt, gesamt) => {
+        Object.assign(datenbank, { erledigt, gesamt });
+        const jetzt = Date.now();
+        if (!messpunkte.length || jetzt - messpunkte[messpunkte.length - 1][0] > 2000) {
+          messpunkte.push([jetzt, erledigt]);
+          while (messpunkte.length > 2 && jetzt - messpunkte[0][0] > 60000) messpunkte.shift();
+          const [t0, e0] = messpunkte[0];
+          datenbank.jeSekunde = jetzt > t0 ? (erledigt - e0) / ((jetzt - t0) / 1000) : 0;
+        }
+      },
+    });
+    if (r.ausgeschoepft) { datenbank.an = false; schreibe('datenbank.json', { an: false }); }
+    datenbank.meldung = r.ausgeschoepft ? 'Fertig – alle passenden Adressen sind geprüft.' : '';
+  } catch (e) {
+    datenbank.meldung = 'Unterbrochen: ' + e.message;
+  }
+  datenbank.laeuft = false;
+}
+setInterval(() => {
+  baueDatenbank();
+  if (Internet.status().vorhanden) Internet.zaehle().then((z) => { datenbank.zahl = z; }, () => {});
+}, 4000);
+
 async function laufe(j) {
   const p = j.parameter;
   const zentrum = p.ort ? await geocode(p.ort) : MITTE;
@@ -156,6 +197,10 @@ async function api(req, pfad, url) {
   if (pfad === '/api/modus') return { modus: 'lokal', register: true, internet: true };
   if (pfad === '/api/internet' && post) { Internet.richteEin(); return Internet.status(); }
   if (pfad === '/api/internet') return Internet.status();
+  if (pfad === '/api/datenbank') {
+    if (post) { datenbank.an = k.an === true; datenbank.meldung = ''; schreibe('datenbank.json', { an: datenbank.an }); baueDatenbank(); }
+    return { ...datenbank, pausiertWegenSuche: datenbank.an && sucheAktiv(), branchen: DB_BRANCHEN.length };
+  }
   if (pfad === '/api/branchen') return BRANCHEN.map(({ id, label, gruppe, gruppeLabel, suche }) => ({ id, label, gruppe, gruppeLabel, suche }));
   if (pfad === '/api/suche' && post) return { id: starteSuche(k).id };
   if (pfad === '/api/suche') {
