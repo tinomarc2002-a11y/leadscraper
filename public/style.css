@@ -228,3 +228,51 @@ tr.hervor td { background: var(--akzent-hell); transition: background .3s; }
 #db-fuellung { height: 100%; width: 0; background-color: var(--akzent); border-radius: 4px; transition: width .9s ease-out; }
 .balken.laeuft #db-fuellung { background-image: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, .45) 50%, transparent 65%); background-size: 220% 100%; animation: glanz 1.5s linear infinite; }
 @media (max-width: 700px) { .kennzahlen { grid-template-columns: 1fr; } }
+
+/* ───────── Schlichte Fassung: mehr Luft, weniger gleichzeitig ───────── */
+body { font-size: 15px; line-height: 1.5; }
+main { padding-top: 22px; }
+.karte { border-radius: 14px; padding: 20px; box-shadow: 0 1px 2px rgba(20, 25, 40, .04); }
+.suchkarte { padding: 22px 22px 14px; }
+.suchzeile { gap: 16px; }
+.feld input[type=text], .feld input[type=number], .eingabe-rahmen { border-radius: 10px; }
+.feld input[type=text], .feld input[type=number] { height: 46px; }
+.eingabe-rahmen { min-height: 46px; }
+.feld-umkreis input[type=range] { height: 46px; }
+.feld-start button { height: 46px; border-radius: 10px; padding: 0 26px; }
+button.haupt, button.neben { border-radius: 9px; }
+.aufklapper { border-top: 0; padding-top: 0; margin-top: 10px; gap: 4px 22px; }
+.aufklapper > details > summary { font-weight: 500; font-size: 13.5px; color: var(--blass); }
+.aufklapper > details > summary:hover, .aufklapper > details[open] > summary { color: var(--akzent); }
+.aufklapper > details[open] { border-top: 1px solid var(--rand); margin-top: 6px; padding-top: 8px; }
+.kartenspalte { padding: 8px; }
+#karte { border-radius: 9px; }
+.leiste { gap: 10px; }
+.leiste .anzahl { font-size: 16px; margin-right: 4px; }
+th { font-size: 11px; padding: 8px 12px; }
+td { padding: 14px 12px; }
+#fortschritt-details summary { cursor: pointer; margin-top: 4px; }
+#fortschritt-details p { margin: 4px 0 0; }
+
+/* Menü „Mehr“ */
+.menue { position: relative; }
+.menue > summary { list-style: none; display: inline-block; font-weight: 600; padding: 8px 14px; border: 1px solid var(--rand); background: #fff; cursor: pointer; user-select: none; }
+.menue > summary::-webkit-details-marker { display: none; }
+.menue > summary::after { content: ' ▾'; font-size: 11px; color: var(--blass); }
+.menue-liste { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 230px; padding: 5px; background: #fff; border: 1px solid var(--rand); border-radius: 10px; box-shadow: 0 10px 30px rgba(20, 25, 40, .16); display: grid; }
+.menue-liste button { font: inherit; text-align: left; padding: 9px 11px; border: 0; background: none; border-radius: 6px; cursor: pointer; color: var(--text); }
+.menue-liste button:hover { background: var(--akzent-hell); }
+
+/* Assistent */
+#chat-knopf { position: fixed; right: 22px; bottom: 22px; z-index: 1200; height: 48px; padding: 0 22px; border-radius: 24px; box-shadow: 0 8px 24px rgba(59, 79, 216, .35); }
+#chat-fenster { position: fixed; right: 22px; bottom: 82px; z-index: 1200; width: min(380px, calc(100vw - 32px)); padding: 0; margin: 0; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(20, 25, 40, .22); overflow: hidden; }
+.chat-kopf { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--rand); }
+.chat-kopf .unter { flex: 1; }
+.chat-kopf .link { font-size: 20px; line-height: 1; color: var(--blass); }
+#chat-verlauf { display: flex; flex-direction: column; gap: 8px; padding: 14px; height: 300px; max-height: 50vh; overflow-y: auto; background: var(--flaeche); }
+.chat-zeile { max-width: 88%; padding: 9px 12px; border-radius: 13px; white-space: pre-wrap; }
+.chat-zeile.bot { background: #fff; border: 1px solid var(--rand); align-self: flex-start; border-bottom-left-radius: 4px; }
+.chat-zeile.ich { background: var(--akzent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+#chat-formular { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--rand); }
+#chat-formular input { margin: 0; }
+.hinweis { bottom: 84px; }

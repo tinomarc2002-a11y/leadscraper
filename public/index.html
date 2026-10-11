@@ -42,8 +42,8 @@
             </span>
           </div>
           <div class="feld feld-umkreis" id="umkreis-zeile">
-            <label class="feldname" for="radius-feld">Umkreis: <output id="radius-wert">25</output> km</label>
-            <input type="range" name="radiusKm" id="radius-feld" min="1" max="150" value="25">
+            <label class="feldname" for="radius-feld">Umkreis: <output id="radius-wert">25 km</output></label>
+            <input type="range" name="radiusKm" id="radius-feld" min="1" max="151" value="25" aria-describedby="radius-wert">
           </div>
           <div class="feld feld-anzahl">
             <label class="feldname" for="anzahl-feld">Anzahl Leads</label>
@@ -55,16 +55,11 @@
           </div>
         </div>
 
-        <div class="schnellzeile">
-          <div class="schnell"><span class="unter">Beliebt:</span><span class="schnellwahl-liste" id="schnell-branchen"></span></div>
-          <div class="schnell"><span class="unter">Städte:</span><span class="schnellwahl-liste" id="schnell-orte"></span>
-            <span class="chips"><label title="Ohne Umkreisgrenze – die nächstgelegenen Firmen zuerst"><input type="checkbox" name="deutschland"><span>Ganz Deutschland</span></label></span>
-          </div>
-        </div>
+        <input type="checkbox" name="deutschland" hidden>
 
         <div class="aufklapper">
           <details id="katalog">
-            <summary>Alle Branchen durchstöbern <span class="mini" id="branchen-anzahl"></span></summary>
+            <summary>Alle Branchen <span class="mini" id="branchen-anzahl"></span></summary>
             <div class="aufklapp-inhalt">
               <label class="haken stark"><input type="checkbox" name="alleBranchen"> Alle Branchen im Umkreis <span class="unter">(nichts ausschließen – das Sammeln dauert einige Minuten)</span></label>
               <div id="gruppe-frei" hidden>
@@ -75,7 +70,7 @@
             </div>
           </details>
           <details id="mehr-filter">
-            <summary>Weitere Filter <span class="mini" id="filter-anzahl"></span></summary>
+            <summary>Filter <span class="mini" id="filter-anzahl"></span></summary>
             <div class="aufklapp-inhalt filterraster">
               <div>
                 <h2>Inhaber-Sicherheit</h2>
@@ -122,7 +117,6 @@
       <div class="zweispaltig">
         <aside class="karte kartenspalte" id="kartenspalte">
           <div id="karte" role="application" aria-label="Karte mit Suchgebiet und Treffern"></div>
-          <p class="klein" id="karten-hinweis">Klick in die Karte setzt den Ort. Der Kreis zeigt das Suchgebiet, die Punkte sind die Treffer.</p>
         </aside>
 
         <div class="ergebnis">
@@ -130,6 +124,7 @@
             <div class="fortschritt-kopf"><strong id="fortschritt-titel"></strong><span id="fortschritt-zahlen"></span></div>
             <div class="balken" id="balken"><div id="balken-fuellung"></div></div>
             <p class="klein" id="fortschritt-meldung"></p>
+            <details class="klein" id="fortschritt-details" hidden><summary>Details</summary><p id="fortschritt-einzelheiten"></p></details>
           </div>
           <div class="karte">
             <div class="leiste" id="leiste-suche"></div>
@@ -222,6 +217,13 @@
       <div class="dialogfuss"><button type="submit" class="haupt">Anmelden</button></div>
     </form>
   </dialog>
+
+  <button type="button" id="chat-knopf" class="haupt" aria-expanded="false" aria-controls="chat-fenster">Assistent</button>
+  <section id="chat-fenster" class="karte" hidden aria-label="Assistent">
+    <div class="chat-kopf"><strong>Assistent</strong><span class="unter">versteht einfache Sätze – ohne KI-Kosten</span><button type="button" class="link" id="chat-zu" aria-label="Schließen">×</button></div>
+    <div id="chat-verlauf" aria-live="polite"></div>
+    <form id="chat-formular"><input type="text" id="chat-eingabe" placeholder="z. B. 50 Solarfirmen 30 km um Dresden" autocomplete="off" aria-label="Nachricht an den Assistenten"><button type="submit" class="haupt">Los</button></form>
+  </section>
 
   <div id="hinweis" class="hinweis" hidden></div>
   <script src="spalten.js"></script>

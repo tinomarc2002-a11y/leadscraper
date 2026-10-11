@@ -161,7 +161,7 @@ function zeichne(name) {
   const liste = sichtbare(name);
   $('#leer-' + name).hidden = a.leads.length > 0;
   $('#leiste-' + name).hidden = a.leads.length === 0;
-  $('#filter-' + name).hidden = a.leads.length === 0;
+  $('#filter-' + name).hidden = a.leads.length === 0 || !a.filterOffen;
   $('#tabelle-' + name).innerHTML = !a.leads.length ? '' : `<thead><tr>
       <th class="schmal"><input type="checkbox" class="alle" ${liste.length && liste.every((l) => a.auswahl.has(l.id)) ? 'checked' : ''} aria-label="Alle auswählen"></th>
       <th>Unternehmen</th><th>Inhaber</th><th>Kontakt</th><th>Standort</th><th>Mitarbeiter</th><th>Prüfen</th>${name === 'crm' ? '<th>Status</th><th>Notiz &amp; Verlauf</th>' : ''}
@@ -183,12 +183,14 @@ function zeichne(name) {
 // Zweite Zeile über der Tabelle: das Ergebnis nach Branche, Rechtsform und vorhandenen Angaben eingrenzen.
 function baueFilterzeile(name) {
   const a = ansichten[name], zeile = $('#filter-' + name);
-  zeile.innerHTML = `<span class="unter">Eingrenzen:</span>
+  const statusWahl = name === 'crm' ? CRM_STATUS.map((s) => `<option>${s}</option>`).join('') : Object.entries(STATUS_TEXT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  zeile.innerHTML = `<select class="f-status" aria-label="Status"><option value="">${name === 'crm' ? 'Alle Status' : 'Jede Sicherheit'}</option>${statusWahl}</select>
     <select class="f-branche" aria-label="Branche"><option value="">Alle Branchen</option></select>
     <select class="f-rechtsform" aria-label="Rechtsform"><option value="">Jede Rechtsform</option>${RECHTSFORM_GRUPPEN.map(([id, text]) => `<option value="${id}">${esc(text)}</option>`).join('')}</select>
     <button type="button" class="neben umschalter" data-feld="mitTelefon">mit Telefon</button>
     <button type="button" class="neben umschalter" data-feld="mitEmail">mit E-Mail</button>
     <button type="button" class="neben umschalter" data-feld="mitStellen">mit Stellenseite</button>`;
+  $('.f-status', zeile).addEventListener('change', (e) => { a.status = e.target.value; zeichne(name); });
   $('.f-branche', zeile).addEventListener('change', (e) => { a.branche = e.target.value; zeichne(name); });
   $('.f-rechtsform', zeile).addEventListener('change', (e) => { a.rechtsform = e.target.value; zeichne(name); });
   $$('.umschalter', zeile).forEach((k) => k.addEventListener('click', () => {
@@ -215,23 +217,28 @@ function baueLeiste(name) {
     : Object.entries(STATUS_TEXT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('#leiste-' + name).innerHTML = `<span class="anzahl"></span>
     <input type="search" class="f-text" placeholder="Filtern …" aria-label="Filtern">
-    <select class="f-status" aria-label="Status"><option value="">${name === 'crm' ? 'Alle Status' : 'Jede Sicherheit'}</option>${statusWahl}</select>
     <select class="f-sort" aria-label="Sortierung">
       <option value="entfernung">Nach Entfernung</option><option value="name">Nach Name</option>
       <option value="sicherheit">Nach Sicherheit</option><option value="mitarbeiter">Nach Größe</option>
       ${name === 'crm' ? '<option value="wiedervorlage">Nach Wiedervorlage</option>' : ''}</select>
+    <button type="button" class="neben f-mehr">Eingrenzen</button>
     ${name === 'crm' ? '<button class="neben f-faellig"></button>' : ''}
     <span class="abstand"></span>
     ${name === 'suche' ? '<button class="haupt a-crm">Ins CRM übernehmen</button>' : '<button class="neben gefahr a-loeschen">Löschen</button>'}
-    <button class="neben a-register" title="Gleicht die Inhaber mit dem amtlichen Handelsregister ab (max. ca. 25 Firmen pro Stunde)">Im Handelsregister prüfen</button>
-    <button class="neben a-csv">CSV herunterladen</button>
-    <button class="neben a-kopieren">Für Sheets kopieren</button>
-    <button class="neben a-sheets">An Google Sheet senden</button>`;
+    <details class="menue"><summary class="neben">Mehr</summary><div class="menue-liste">
+      <button class="a-register" title="Gleicht die Inhaber mit dem amtlichen Handelsregister ab (max. ca. 25 Firmen pro Stunde)">Im Handelsregister prüfen</button>
+      <button class="a-csv">CSV herunterladen</button>
+      <button class="a-kopieren">Für Sheets kopieren</button>
+      <button class="a-sheets">An Google Sheet senden</button>
+    </div></details>`;
   const leiste = $('#leiste-' + name), a = ansichten[name];
   $('.a-register', leiste).hidden = !MODUS.register;
   $('.f-sort', leiste).value = a.sortierung;
   $('.f-text', leiste).addEventListener('input', (e) => { a.text = e.target.value; zeichne(name); });
-  $('.f-status', leiste).addEventListener('change', (e) => { a.status = e.target.value; zeichne(name); });
+  $('.f-mehr', leiste).addEventListener('click', (e) => { a.filterOffen = !a.filterOffen; e.currentTarget.classList.toggle('aktiv', a.filterOffen); zeichne(name); });
+  // Ein Klick auf einen Menüpunkt (oder daneben) schließt das Menü wieder.
+  $('.menue-liste', leiste).addEventListener('click', () => { $('.menue', leiste).open = false; });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.menue')) $('.menue', leiste).open = false; });
   $('.f-sort', leiste).addEventListener('change', (e) => { a.sortierung = e.target.value; zeichne(name); });
   $('.f-faellig', leiste)?.addEventListener('click', () => { a.nurFaellig = !a.nurFaellig; zeichne(name); });
   $('.a-csv', leiste).addEventListener('click', () => ladeCsv(ziel(name)));
@@ -373,7 +380,7 @@ const formular = $('#suchformular');
 
 function leseFormular() {
   const f = new FormData(formular);
-  return { ort: f.get('ort'), radiusKm: +f.get('radiusKm'), deutschland: formular.deutschland.checked, anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: formular.alleBranchen.checked ? ['alle'] : f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked, websiteErraten: formular.websiteSuchen.checked,
+  return { ort: f.get('ort'), radiusKm: Math.min(150, +f.get('radiusKm')), deutschland: formular.deutschland.checked, anzahl: +f.get('anzahl'), minStatus: f.get('minStatus'), maKlassen: f.getAll('ma'), branchen: formular.alleBranchen.checked ? ['alle'] : f.getAll('branche'), stichworte: f.getAll('stichwort'), ohneCrm: formular.ohneCrm.checked, websiteSuchen: formular.websiteSuchen.checked, websiteErraten: formular.websiteSuchen.checked,
     internet: formular.internet.checked, rechtsformen: f.getAll('rechtsform'), nurTelefon: formular.nurTelefon.checked, nurEmail: formular.nurEmail.checked, nurKarriere: formular.nurKarriere.checked };
 }
 
@@ -401,7 +408,11 @@ function zeigeFortschritt(d) {
   if (d.fertig && !d.fehler && !d.abbruch && d.gesamt < d.parameter.anzahl) teile.push(d.parameter.deutschland ? 'Für mehr Treffer: mehr Branchen wählen oder die Inhaber-Sicherheit lockern.' : 'Für mehr Treffer: Umkreis vergrößern, „Ganz Deutschland“ wählen, mehr Branchen wählen oder die Inhaber-Sicherheit lockern.');
   $('#leer-suche').textContent = laeuft ? 'Die ersten Treffer erscheinen hier, sobald die Impressen geprüft sind.' : 'Keine passenden Leads gefunden.';
   const meldung = $('#fortschritt-meldung');
-  meldung.textContent = teile.filter(Boolean).join(' ');
+  const zeilen = teile.filter(Boolean);
+  meldung.textContent = zeilen.slice(0, d.zentrum ? 2 : 1).join(' ');
+  const rest = zeilen.slice(d.zentrum ? 2 : 1);
+  $('#fortschritt-details').hidden = !rest.length;
+  $('#fortschritt-einzelheiten').textContent = rest.join(' ');
   meldung.classList.toggle('fehler', !!d.fehler);
 }
 
@@ -524,17 +535,16 @@ $('#stopp').addEventListener('click', versuche(async () => {
   if (MODUS.modus === 'cloud') { if (cloudSuche) cloudSuche.abbruch = true; return; }
   await api('/api/suche/stop', {});
 }));
-formular.radiusKm.addEventListener('input', (e) => { $('#radius-wert').textContent = e.target.value; zeigeGebiet(); });
+formular.radiusKm.addEventListener('input', (e) => { formular.deutschland.checked = +e.target.value > 150; zeigeDeutschland(); });
 // „Ganz Deutschland“ setzt den Umkreis außer Kraft; ein Ort ist dann nur noch der Startpunkt und darf fehlen.
 function zeigeDeutschland() {
   const an = formular.deutschland.checked;
-  formular.radiusKm.disabled = an;
+  if (an) formular.radiusKm.value = 151; else if (+formular.radiusKm.value > 150) formular.radiusKm.value = 150;
+  $('#radius-wert').textContent = an ? 'Ganz Deutschland' : formular.radiusKm.value + ' km';
   formular.ort.required = !an;
   formular.ort.placeholder = an ? 'Startpunkt (leer = Mitte Deutschlands)' : 'Stadt oder PLZ';
-  $('#umkreis-zeile').classList.toggle('aus', an);
   zeigeGebiet();
 }
-formular.deutschland.addEventListener('change', zeigeDeutschland);
 // „alle / keine“ einer Gruppe – wirkt nur auf die Branchen, die die Suchzeile gerade zeigt.
 $('#branchen-gruppen').addEventListener('click', (e) => {
   const link = e.target.closest('a[data-gruppe]');
@@ -570,8 +580,7 @@ async function ladeBranchen() {
   $('#rechtsformen').innerHTML = RECHTSFORM_GRUPPEN.map(([id, text]) => `<label><input type="checkbox" name="rechtsform" value="${id}" ${!gemerkt.rechtsformen || gemerkt.rechtsformen.includes(id) ? 'checked' : ''}><span>${esc(text)}</span></label>`).join('');
   if (gemerkt.ort) formular.ort.value = gemerkt.ort;
   if (gemerkt.mitte && gemerkt.mitte.name === gemerkt.ort) ortMitte = gemerkt.mitte;
-  $('#schnell-branchen').innerHTML = BELIEBT.map((id) => branchen.find((b) => b.id === id)).filter(Boolean).map((b) => `<button type="button" class="schnell-knopf" data-id="${esc(b.id)}" title="${esc(b.label)}">${esc(b.label.split(/,| &/)[0])}</button>`).join('');
-  if (gemerkt.radiusKm) { formular.radiusKm.value = gemerkt.radiusKm; $('#radius-wert').textContent = gemerkt.radiusKm; }
+  if (gemerkt.radiusKm) formular.radiusKm.value = gemerkt.radiusKm;
   if (gemerkt.anzahl) formular.anzahl.value = gemerkt.anzahl;
   if (gemerkt.minStatus) formular.minStatus.value = gemerkt.minStatus;
   if (gemerkt.maKlassen) $$('input[name=ma]').forEach((b) => (b.checked = gemerkt.maKlassen.includes(b.value)));
@@ -659,6 +668,8 @@ function filtereBranchen() {
   // Treffer, die mit der Eingabe beginnen, zuerst
   const beginnt = (t) => (t.name.toLowerCase().startsWith(worte[0]) ? 0 : 1);
   const eintraege = treffer.sort((x, y) => beginnt(x) - beginnt(y)).slice(0, 8).map((t) => ({ ...t, html: `<span>${esc(t.name)}</span><span class="unter">${esc(t.gruppe)}</span>` }));
+  // Leeres Feld: die beliebten Branchen anbieten
+  if (!worte.length) for (const id of BELIEBT) { const box = $(`input[name=branche][value="${id}"]`); if (box && !box.checked) eintraege.push({ box, html: `<span>${esc(box.parentElement.textContent)}</span><span class="unter">beliebt</span>` }); }
   if (eingabe.length >= 3) eintraege.push({ stichwort: eingabe, html: `<span>+ „${esc(eingabe)}“ als eigenes Stichwort</span><span class="unter">findet Firmen mit dem Wort im Namen</span>` });
   if (document.activeElement === suchfeld) branchenVorschlaege.zeige(eintraege); else branchenVorschlaege.zu();
 }
@@ -673,7 +684,6 @@ function zeigeMarken() {
     $$('input[name=stichwort]:checked').map((b) => marke('stichwort', b.value, '„' + b.value + '“')).join('') +
     (gewaehlt.length > zeigen.length ? `<button type="button" class="marke-knopf mehr" data-art="mehr">+ ${gewaehlt.length - zeigen.length} weitere</button>` : '');
   suchfeld.placeholder = $('#auswahl-marken').children.length ? 'weitere Branche …' : 'Branche eintippen, z. B. Solar, Zahnarzt, Küchen …';
-  for (const k of $$('#schnell-branchen button')) k.classList.toggle('aktiv', !alle && !!$(`input[name=branche][value="${k.dataset.id}"]`)?.checked);
 }
 $('#auswahl-marken').addEventListener('click', (e) => {
   const k = e.target.closest('button');
@@ -689,14 +699,6 @@ $('#auswahl-marken').addEventListener('click', (e) => {
 });
 // Klick irgendwo in den Rahmen setzt den Cursor ins Suchfeld.
 $('#was-rahmen').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.id === 'auswahl-marken') suchfeld.focus(); });
-$('#schnell-branchen').addEventListener('click', (e) => {
-  const box = e.target.dataset.id && $(`input[name=branche][value="${e.target.dataset.id}"]`);
-  if (!box) return;
-  formular.alleBranchen.checked = false;
-  box.checked = !box.checked;
-  zeigeAuswahlAnzahl();
-});
-
 // Wie viele der weiteren Filter vom Standard abweichen – steht neben „Weitere Filter“.
 function zeigeFilterAnzahl() {
   const n = [formular.minStatus.value !== 'impressum', $$('input[name=ma]').some((b) => !b.checked), $$('input[name=rechtsform]').some((b) => !b.checked),
@@ -796,10 +798,9 @@ ortFeld.addEventListener('change', async () => {
   if (!text || ortMitte?.name === text) return zeigeGebiet();
   try { const [o] = await frageOrte(text, 1); if (o && ortFeld.value.trim() === text) { ortMitte = { lat: o.lat, lon: o.lon, name: text }; zeigeGebiet(); } } catch {}
 });
-$('#schnell-orte').innerHTML = STAEDTE.map(([name], i) => `<button type="button" class="schnell-knopf" data-nr="${i}">${esc(name)}</button>`).join('');
-$('#schnell-orte').addEventListener('click', (e) => {
-  const s = STAEDTE[e.target.dataset.nr];
-  if (s) setzeOrt({ name: s[0], lat: s[1], lon: s[2] });
+// Leeres Feld: die großen Städte anbieten
+ortFeld.addEventListener('focus', () => {
+  if (!ortFeld.value.trim()) ortVorschlaege.zeige(STAEDTE.map(([name, lat, lon]) => ({ name, lat, lon, html: `<span>${esc(name)}</span>` })));
 });
 
 // Die Karte: Kreis = Suchgebiet, Punkte = Treffer. Lädt die Kartenbibliothek nach; klappt das nicht, bleibt die Spalte weg.
@@ -992,3 +993,112 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   zeichne('suche');
   await verfolgeRegister(true);
 }))();
+
+// ───────── Assistent ─────────
+// Versteht einfache Sätze wie „50 Solarfirmen 30 km um Dresden mit Telefonnummer“ und stellt daraus die Suche
+// zusammen. Das sind feste Regeln im Browser – keine KI, kein Dienst im Hintergrund, keine Kosten.
+const glatt = (s) => String(s).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+const stamm = (w) => (w.length >= 7 ? w.replace(/(innen|en|er|es|e|n|s)$/, '') : w);
+const FUELLWORT = new Set(['firmen', 'firma', 'unternehmen', 'betriebe', 'betrieb', 'leads', 'kontakte', 'studio', 'studios', 'handel', 'haendler', 'service', 'technik', 'praxis', 'praxen', 'geschaeft', 'geschaefte', 'laden', 'laeden', 'dienst', 'dienste', 'anbieter', 'deutschland', 'umkreis', 'bitte', 'suche', 'finde', 'brauche', 'zeige', 'telefon', 'telefonnummer', 'email', 'stellenseite', 'karriere', 'sicherem', 'inhaber', 'weitere', 'andere', 'sonstige', 'sonstiges']);
+let entwurf = {}; // was aus den bisherigen Nachrichten schon feststeht, solange noch etwas fehlt
+
+function erkenneBranchen(text) {
+  const t = glatt(text);
+  const treffer = [];
+  for (const box of $$('input[name=branche]')) {
+    const worte = glatt(box.parentElement.textContent + ' ' + box.dataset.suche).split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !FUELLWORT.has(w));
+    const laenge = Math.max(0, ...worte.map(stamm).filter((w) => t.includes(w)).map((w) => w.length));
+    if (laenge) treffer.push({ box, laenge });
+  }
+  // Mehrere Treffer auf dasselbe Wort (Solar steckt in zwei Branchen): die mit dem längsten gemeinsamen Wort gewinnen.
+  const beste = Math.max(0, ...treffer.map((x) => x.laenge));
+  return treffer.filter((x) => x.laenge >= Math.min(beste, 7)).sort((x, y) => y.laenge - x.laenge).slice(0, 4).map((x) => x.box);
+}
+
+async function erkenneOrt(text) {
+  const plz = text.match(/\b\d{5}\b/);
+  if (plz) { const [o] = await frageOrte(plz[0], 1).catch(() => []); return o ? { ...o, name: plz[0] } : { name: plz[0], lat: NaN, lon: NaN }; }
+  const stadt = STAEDTE.find(([name]) => glatt(text).includes(glatt(name.split(' ')[0])));
+  if (stadt) return { name: stadt[0], lat: stadt[1], lon: stadt[2] };
+  // „in / um / bei / Raum / Nähe von“ + Ortsname, sonst jedes großgeschriebene Wort, das keine Branche ist
+  const nach = text.match(/\b(?:in|um|bei|raum|nahe|nähe(?:\s+von)?|rund\s+um|ab)\s+((?:[A-ZÄÖÜ][\wäöüß.-]+)(?:\s+(?:am|an der|im|ob der|bei|vor der)?\s*[A-ZÄÖÜ][\wäöüß.-]+){0,2})/);
+  const kandidaten = nach ? [nach[1]] : (text.match(/\b[A-ZÄÖÜ][a-zäöüß-]{2,}\b/g) || []).filter((w) => !FUELLWORT.has(glatt(w)) && !erkenneBranchen(w).length).slice(0, 3);
+  for (const k of kandidaten) {
+    // mehrere holen: der erste Treffer liegt manchmal im Ausland und fällt dann weg
+    const [o] = await frageOrte(k, 5).catch(() => []);
+    if (o && glatt(o.name).startsWith(glatt(k).slice(0, 4))) return o;
+  }
+  return null;
+}
+
+async function verstehe(text) {
+  const t = glatt(text);
+  const e = entwurf;
+  if (/^(stopp?|halt|abbrechen|stoppen)\b/.test(t)) { $('#stopp').click(); return 'Okay, ich halte die Suche an.'; }
+  if (/^(hilfe|was kannst du|\?)/.test(t)) return 'Sag mir einfach, was du brauchst – zum Beispiel: „50 Solarfirmen 30 km um Dresden“, „Zahnärzte in München mit Telefonnummer“ oder „100 Küchenstudios in ganz Deutschland“. Ich stelle die Suche zusammen und starte sie.';
+
+  const km = t.match(/(\d{1,3})\s*(?:km|kilometer)/);
+  if (km) { e.radiusKm = Math.min(150, Math.max(1, +km[1])); e.deutschland = false; }
+  if (/ganz deutschland|deutschlandweit|bundesweit|ueberall/.test(t)) e.deutschland = true;
+  const zahl = t.replace(/\d{1,3}\s*(?:km|kilometer)/g, ' ').replace(/\b\d{5}\b/g, ' ').match(/\b(\d{1,4})\b/);
+  if (zahl) e.anzahl = Math.min(1000, Math.max(1, +zahl[1]));
+  if (/telefon|anrufen|rufnummer/.test(t)) e.nurTelefon = true;
+  if (/e-?mail/.test(t)) e.nurEmail = true;
+  if (/stellen|karriere|jobs|personal such/.test(t)) e.nurKarriere = true;
+  if (/doppelt|ganz sicher|nur sichere|bestaetigt/.test(t)) e.minStatus = 'bestaetigt';
+  const branchen = erkenneBranchen(text);
+  if (branchen.length) { e.branchen = branchen; e.neu = true; }
+  const ort = e.deutschland && !/\b(in|um|bei|ab)\s+[A-ZÄÖÜ]/.test(text) ? null : await erkenneOrt(text);
+  if (ort) e.ort = ort;
+
+  // Fehlt etwas Wesentliches, nachfragen – die bisherigen Angaben bleiben stehen.
+  if (!e.branchen?.length && !$$('input[name=branche]:checked, input[name=stichwort]:checked').length && !formular.alleBranchen.checked)
+    return 'Welche Branche soll es sein? Zum Beispiel Solar, Küchenstudios, Zahnärzte oder Pflegedienste.';
+  if (!e.ort && !e.deutschland && !ortFeld.value.trim() && !formular.deutschland.checked) return 'Und wo soll ich suchen? Nenn mir eine Stadt oder sag „ganz Deutschland“.';
+
+  // Formular füllen
+  if (e.branchen?.length) {
+    formular.alleBranchen.checked = false;
+    $$('input[name=branche]').forEach((b) => (b.checked = e.branchen.includes(b)));
+  }
+  if (e.ort) setzeOrt(e.ort, false);
+  if (e.deutschland !== undefined) { formular.deutschland.checked = e.deutschland; if (!e.deutschland && +formular.radiusKm.value > 150) formular.radiusKm.value = 25; }
+  if (e.radiusKm) formular.radiusKm.value = e.radiusKm;
+  if (e.anzahl) formular.anzahl.value = e.anzahl;
+  // Eine neue Anfrage (mit Branche) beginnt ohne die Zusatzfilter der vorigen.
+  for (const feld of ['nurTelefon', 'nurEmail', 'nurKarriere']) if (e[feld] || e.neu) formular[feld].checked = !!e[feld];
+  if (e.minStatus || e.neu) formular.minStatus.value = e.minStatus || 'impressum';
+  zeigeDeutschland();
+  zeigeAuswahlAnzahl();
+  entwurf = {};
+
+  const was = formular.alleBranchen.checked ? 'alle Branchen' : [...$$('input[name=branche]:checked').map((b) => b.parentElement.textContent), ...$$('input[name=stichwort]:checked').map((b) => '„' + b.value + '“')].join(', ');
+  const wo = formular.deutschland.checked ? 'in ganz Deutschland' + (ortFeld.value.trim() ? `, zuerst rund um ${ortFeld.value.trim()}` : '') : `${formular.radiusKm.value} km um ${ortFeld.value.trim()}`;
+  const extra = [formular.nurTelefon.checked && 'mit Telefonnummer', formular.nurEmail.checked && 'mit E-Mail', formular.nurKarriere.checked && 'mit Stellenseite'].filter(Boolean).join(', ');
+  zeigeReiter('suche');
+  formular.requestSubmit();
+  return `Läuft: ${formular.anzahl.value} Leads · ${was} · ${wo}${extra ? ' · ' + extra : ''}. Die Treffer erscheinen oben in der Liste.`;
+}
+
+function chatZeile(text, wer) {
+  const z = document.createElement('div');
+  z.className = 'chat-zeile ' + wer;
+  z.textContent = text;
+  $('#chat-verlauf').append(z);
+  $('#chat-verlauf').scrollTop = 1e6;
+}
+$('#chat-knopf').addEventListener('click', () => {
+  const fenster = $('#chat-fenster');
+  fenster.hidden = !fenster.hidden;
+  $('#chat-knopf').setAttribute('aria-expanded', String(!fenster.hidden));
+  if (!fenster.hidden) { if (!$('#chat-verlauf').children.length) chatZeile('Hallo! Sag mir, was du brauchst – zum Beispiel „50 Solarfirmen 30 km um Dresden“. Ich stelle die Suche zusammen und starte sie.', 'bot'); $('#chat-eingabe').focus(); }
+});
+$('#chat-zu').addEventListener('click', () => $('#chat-knopf').click());
+$('#chat-formular').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('#chat-eingabe').value.trim();
+  if (!text) return;
+  $('#chat-eingabe').value = '';
+  chatZeile(text, 'ich');
+  try { chatZeile(await verstehe(text), 'bot'); } catch (f) { chatZeile('Das hat nicht geklappt: ' + f.message, 'bot'); }
+});
