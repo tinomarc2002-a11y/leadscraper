@@ -7,6 +7,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+rem Laeuft der Leadscraper schon (etwa aus einem anderen Fenster gestartet), wird er dort beendet und hier neu gestartet.
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 4310 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }" >nul 2>nul
 node server.js
 
 rem Endet der Server unerwartet (Absturz), startet er von selbst neu. Gefundene Leads und das CRM sind gespeichert.
