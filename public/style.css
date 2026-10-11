@@ -276,3 +276,10 @@ td { padding: 14px 12px; }
 #chat-formular { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--rand); }
 #chat-formular input { margin: 0; }
 .hinweis { bottom: 84px; }
+
+/* Tabelle: mit der Maus verschiebbar; Rollbalken und Kopfzeile bleiben im Bild */
+.tabellenrahmen { overflow: auto; max-height: calc(100vh - 150px); cursor: grab; }
+.tabellenrahmen.zieht { cursor: grabbing; user-select: none; }
+.tabellenrahmen a, .tabellenrahmen button, .tabellenrahmen input, .tabellenrahmen select, .tabellenrahmen textarea { cursor: revert; }
+.tabellenrahmen a { cursor: pointer; }
+.tabellenrahmen th { position: sticky; top: 0; z-index: 2; background: var(--karte); }

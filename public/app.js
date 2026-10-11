@@ -1102,3 +1102,29 @@ $('#chat-formular').addEventListener('submit', async (e) => {
   chatZeile(text, 'ich');
   try { chatZeile(await verstehe(text), 'bot'); } catch (f) { chatZeile('Das hat nicht geklappt: ' + f.message, 'bot'); }
 });
+
+// ───────── Tabelle mit der Maus verschieben ─────────
+// In eine freie Stelle der Tabelle klicken und ziehen verschiebt sie – der Rollbalken am unteren Rand ist dafür nicht nötig.
+for (const rahmen of $$('.tabellenrahmen')) {
+  let start = null;
+  rahmen.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest('a, button, input, select, textarea, label, summary')) return;
+    start = { x: e.clientX, y: e.clientY, links: rahmen.scrollLeft, oben: rahmen.scrollTop, gezogen: false };
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    // Erst ab ein paar Pixeln gilt es als Ziehen – ein normaler Klick bleibt ein Klick.
+    if (!start.gezogen && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    start.gezogen = true;
+    rahmen.classList.add('zieht');
+    rahmen.scrollLeft = start.links - dx;
+    rahmen.scrollTop = start.oben - dy;
+    e.preventDefault();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!start) return;
+    rahmen.classList.remove('zieht');
+    start = null;
+  });
+}
