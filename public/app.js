@@ -1128,3 +1128,18 @@ for (const rahmen of $$('.tabellenrahmen')) {
     start = null;
   });
 }
+
+// ───────── Karte aus- und einblenden ─────────
+// Ohne Karte bekommt die Trefferliste die ganze Breite. Die Wahl wird gemerkt.
+function zeigeKartenspalte(sichtbar) {
+  $('#kartenspalte').hidden = !sichtbar;
+  $('#reiter-suche .zweispaltig').classList.toggle('ohne-karte', !sichtbar);
+  $('#karte-umschalten').textContent = sichtbar ? 'Karte ausblenden' : 'Karte anzeigen';
+  if (sichtbar && karte) { karte.invalidateSize(); zeigeGebiet(); }
+}
+$('#karte-umschalten').addEventListener('click', () => {
+  const sichtbar = $('#kartenspalte').hidden;
+  localStorage.setItem('leadscraper-karte', sichtbar ? 'an' : 'aus');
+  zeigeKartenspalte(sichtbar);
+});
+if (localStorage.getItem('leadscraper-karte') === 'aus') zeigeKartenspalte(false);
