@@ -70,8 +70,21 @@ async function baueDatenbank() {
   }
   datenbank.laeuft = false;
 }
+// Solange der Aufbau läuft, soll der PC nicht von selbst in den Ruhezustand gehen (sonst steht der Aufbau über Nacht).
+// Ein kleiner Hilfsprozess meldet Windows „System wird gebraucht“ – dieselbe Anfrage, die ein Videoplayer stellt.
+// Er endet mit dem Aufbau und auch dann, wenn der Server nicht mehr läuft. Deckel zuklappen oder Aus-Taste wirken weiter.
+let wachhalter = null;
+function halteWach(an) {
+  if (an === !!wachhalter || process.platform !== 'win32') return;
+  if (!an) { wachhalter.kill(); wachhalter = null; return; }
+  const skript = `Add-Type -Name Strom -Namespace Leadscraper -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'; while (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue) { [Leadscraper.Strom]::SetThreadExecutionState(2147483649) | Out-Null; Start-Sleep -Seconds 20 }`;
+  wachhalter = require('child_process').spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', skript], { stdio: 'ignore', windowsHide: true });
+  wachhalter.on('exit', () => { wachhalter = null; });
+  wachhalter.on('error', () => { wachhalter = null; });
+}
 setInterval(() => {
   baueDatenbank();
+  halteWach(datenbank.laeuft || (datenbank.an && sucheAktiv()));
   if (Internet.status().vorhanden) Internet.zaehle().then((z) => { datenbank.zahl = z; }, () => {});
 }, 4000);
 
