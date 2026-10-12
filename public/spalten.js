@@ -21,51 +21,56 @@ function rechtsformGruppe(rechtsform) {
   return 'sonst';
 }
 
-// Weitere Geschäftsführer/Inhaber als „Frau Erika Muster (Geschäftsführer)“
-const person = (nr) => (l) => {
-  const p = (l.personen || [])[nr];
-  return p ? [p.anrede, p.name].filter(Boolean).join(' ') + (p.rolle ? ' (' + p.rolle + ')' : '') : '';
-};
+// Der Ansprechpartner (erste Person) in seinen Bestandteilen. Ältere Leads kennen nur den vollen Namen.
+const TITEL_RE = /^(?:(?:Prof|Dr|Dipl|Ing|med|dent|jur|rer|nat|h\.\s?c|mult)\.?[-\s]*|\(FH\)\s*)+/i;
+function ansprechpartner(l) {
+  const p = (l.personen || [])[0] || {};
+  const voll = String(p.name || l.inhaber || '').trim();
+  const titel = (voll.match(TITEL_RE) || [''])[0].trim();
+  const teile = voll.replace(TITEL_RE, '').trim().split(/\s+/).filter(Boolean);
+  // Namenszusätze gehören zum Nachnamen („von der Heide“)
+  let schnitt = Math.max(1, teile.length - 1);
+  while (schnitt > 1 && /^(von|van|de|der|den|zu|zur|vom|del|della|di|el|al)$/i.test(teile[schnitt - 1])) schnitt--;
+  return { titel, vorname: teile.length > 1 ? teile.slice(0, schnitt).join(' ') : p.vorname || '', nachname: teile.length > 1 ? teile.slice(schnitt).join(' ') : p.nachname || teile[0] || '' };
+}
+// Alle weiteren Geschäftsführer/Inhaber in einer Spalte: „Frau Erika Muster (Geschäftsführerin); Herr …“
+const weiterePersonen = (l) => (l.personen || []).slice(1).map((p) => [p.anrede, p.name].filter(Boolean).join(' ') + (p.rolle ? ' (' + p.rolle + ')' : '')).join('; ') || l.weitere || '';
 const letzterKontakt = (l) => { const v = (l.verlauf || [])[0]; return v ? v.zeit.slice(0, 10) + ' ' + v.ergebnis : ''; };
-const verlauf = (l) => (l.verlauf || []).map((v) => v.zeit.slice(0, 10) + ' ' + v.ergebnis + (v.notiz ? ': ' + v.notiz : '')).join(' | ');
 
+// Reihenfolge wie man sie zum Arbeiten braucht: Firma → Ansprechpartner → Kontakt → Adresse → Hintergrund → eigene Notizen.
+// Die ID steht nur für Google Sheets vorn (daran erkennt die Tabelle schon vorhandene Leads); CSV und Kopieren lassen sie weg.
 const SPALTEN = [
   ['ID', (l) => l.id],
-  ['Unternehmen', (l) => l.name],
+  ['Unternehmen', (l) => l.firmierung || l.name],
   ['Branche', (l) => l.branche],
-  ['Tätigkeit', (l) => l.beschreibung],
-  ['Inhaber', (l) => l.inhaber],
   ['Anrede', (l) => l.anrede],
-  ['Rolle', (l) => l.rolle],
-  ['Inhaber-Sicherheit', (l) => STATUS_TEXT[l.status] || ''],
-  ['Registerprüfung', (l) => l.registerHinweis],
-  ['Inhaber 2', person(1)],
-  ['Inhaber 3', person(2)],
-  ['Inhaber 4', person(3)],
-  ['Rechtsform', (l) => l.rechtsform],
-  ['Firmierung', (l) => l.firmierung],
-  ['Register', (l) => l.register],
+  ['Titel', (l) => ansprechpartner(l).titel],
+  ['Vorname', (l) => ansprechpartner(l).vorname],
+  ['Nachname', (l) => ansprechpartner(l).nachname],
+  ['Position', (l) => l.rolle],
   ['Telefon', (l) => l.telefon],
   ['E-Mail', (l) => l.email],
+  ['Website', (l) => l.website],
   ['Straße', (l) => l.strasse],
   ['PLZ', (l) => l.plz],
   ['Ort', (l) => l.ort],
-  ['Entfernung (km)', (l) => l.entfernungKm],
-  ['Mitarbeiter (geschätzt)', (l) => l.maZahl],
-  ['Größenklasse', (l) => l.maKlasse],
-  ['Grundlage Schätzung', (l) => l.maQuelle],
-  ['Website', (l) => l.website],
-  ['Impressum', (l) => l.impressumUrl],
+  ['Rechtsform', (l) => l.rechtsform || (l.inhaber ? 'Einzelunternehmen' : '')],
+  ['Mitarbeiter (geschätzt)', (l) => l.maZahl || ''],
+  ['Was die Firma macht', (l) => l.beschreibung],
+  ['Inhaber geprüft', (l) => STATUS_TEXT[l.status] || ''],
+  ['Weitere Geschäftsführer', weiterePersonen],
   ['Stellenseite', (l) => l.karriereUrl],
-  ['Hinweise', (l) => l.hinweise],
-  ['CRM-Status', (l) => l.crmStatus],
+  ['Impressum', (l) => l.impressumUrl],
+  ['Status', (l) => l.crmStatus],
   ['Wiedervorlage', (l) => l.wiedervorlage],
   ['Letzter Kontakt', letzterKontakt],
-  ['Kontaktverlauf', verlauf],
   ['Notiz', (l) => l.notiz],
   ['Erfasst am', (l) => l.erfasstAm],
 ];
 
 const zeileAus = (lead) => SPALTEN.map(([, hole]) => { const w = hole(lead); return w == null ? '' : String(w); });
+// Für CSV und Zwischenablage: ohne die technische ID
+const EXPORT_KOPF = SPALTEN.slice(1).map((s) => s[0]);
+const exportZeile = (lead) => zeileAus(lead).slice(1);
 
 if (typeof module !== 'undefined') module.exports = { SPALTEN, STATUS_TEXT, RECHTSFORM_GRUPPEN, rechtsformGruppe, zeileAus };

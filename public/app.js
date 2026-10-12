@@ -1,4 +1,4 @@
-/* global SPALTEN, STATUS_TEXT, RECHTSFORM_GRUPPEN, rechtsformGruppe, zeileAus */
+/* global STATUS_TEXT, RECHTSFORM_GRUPPEN, rechtsformGruppe, EXPORT_KOPF, exportZeile */
 const $ = (s, w = document) => w.querySelector(s);
 const $$ = (s, w = document) => [...w.querySelectorAll(s)];
 // Alle Inhalte stammen von fremden Websites – vor dem Einfügen ins HTML immer maskieren.
@@ -338,12 +338,12 @@ async function verfolgeRegister(nurWennLaeuft = false) {
 // ───────── Export ─────────
 function csvText(leads) {
   const zelle = (w) => '"' + String(w).replace(/"/g, '""').replace(/^([=@])/, "'$1") + '"';
-  return [SPALTEN.map((s) => zelle(s[0])).join(';'), ...leads.map((l) => zeileAus(l).map(zelle).join(';'))].join('\r\n');
+  return [EXPORT_KOPF.map(zelle).join(';'), ...leads.map((l) => exportZeile(l).map(zelle).join(';'))].join('\r\n');
 }
 // Google Sheets liest „+49 …“ und „=…“ sonst als Formel – ein Apostroph markiert die Zelle als Text.
 function tabellenText(leads) {
   const zelle = (w) => String(w).replace(/[\t\r\n]+/g, ' ').replace(/^([+=])/, "'$1");
-  return [SPALTEN.map((s) => s[0]).join('\t'), ...leads.map((l) => zeileAus(l).map(zelle).join('\t'))].join('\n');
+  return [EXPORT_KOPF.join('\t'), ...leads.map((l) => exportZeile(l).map(zelle).join('\t'))].join('\n');
 }
 
 function ladeCsv(leads) {
