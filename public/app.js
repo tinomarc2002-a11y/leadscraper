@@ -91,7 +91,7 @@ function sichtbare(name) {
     if (a.nurFaellig && !istFaellig(l)) return false;
     if (a.branche && l.branche !== a.branche) return false;
     if (a.rechtsform && rechtsformGruppe(l.rechtsform) !== a.rechtsform) return false;
-    if ((a.mitTelefon && !l.telefon) || (a.mitEmail && !l.email) || (a.mitStellen && !l.karriereUrl)) return false;
+    if ((a.mitTelefon && !l.telefon) || (a.mitEmail && !l.email) || (a.mitStellen && !l.karriereUrl) || (a.mitWerbung && l.werbungMeta !== 'ja')) return false;
     return !suchtext || [l.name, l.inhaber, l.weitere, l.ort, l.plz, l.branche, l.beschreibung, l.notiz].some((w) => String(w || '').toLowerCase().includes(suchtext));
   });
   const vergleich = {
@@ -142,6 +142,7 @@ function zeileHtml(l, name) {
   return `<tr data-id="${esc(l.id)}">
     <td class="schmal"><input type="checkbox" class="wahl" ${a.auswahl.has(l.id) ? 'checked' : ''} aria-label="Auswählen"></td>
     <td class="spalte-firma"><div class="firma">${esc(l.name)}${schonImCrm ? '<span class="im-crm">✓ im CRM</span>' : ''}</div>
+      ${werbungHtml(l)}
       <div class="unter">${esc(l.branche)}${l.rechtsform ? ' · ' + esc(l.rechtsform) : ''}</div>
       <div class="beschreibung" title="${esc(l.beschreibung)}">${esc(l.beschreibung)}</div></td>
     <td class="spalte-inhaber">${inhaberHtml(l, name)}</td>
@@ -189,7 +190,8 @@ function baueFilterzeile(name) {
     <select class="f-rechtsform" aria-label="Rechtsform"><option value="">Jede Rechtsform</option>${RECHTSFORM_GRUPPEN.map(([id, text]) => `<option value="${id}">${esc(text)}</option>`).join('')}</select>
     <button type="button" class="neben umschalter" data-feld="mitTelefon">mit Telefon</button>
     <button type="button" class="neben umschalter" data-feld="mitEmail">mit E-Mail</button>
-    <button type="button" class="neben umschalter" data-feld="mitStellen">mit Stellenseite</button>`;
+    <button type="button" class="neben umschalter" data-feld="mitStellen">mit Stellenseite</button>
+    ${MODUS.werbung ? '<button type="button" class="neben umschalter" data-feld="mitWerbung">wirbt auf Meta</button>' : ''}`;
   $('.f-status', zeile).addEventListener('change', (e) => { a.status = e.target.value; zeichne(name); });
   $('.f-branche', zeile).addEventListener('change', (e) => { a.branche = e.target.value; zeichne(name); });
   $('.f-rechtsform', zeile).addEventListener('change', (e) => { a.rechtsform = e.target.value; zeichne(name); });
@@ -227,12 +229,15 @@ function baueLeiste(name) {
     ${name === 'suche' ? '<button class="haupt a-crm">Ins CRM übernehmen</button>' : '<button class="neben gefahr a-loeschen">Löschen</button>'}
     <details class="menue"><summary class="neben">Mehr</summary><div class="menue-liste">
       <button class="a-register" title="Gleicht die Inhaber mit dem amtlichen Handelsregister ab (max. ca. 25 Firmen pro Stunde)">Im Handelsregister prüfen</button>
+      <button class="a-werbung">Meta-Werbung prüfen</button>
       <button class="a-csv">CSV herunterladen</button>
       <button class="a-kopieren">Für Sheets kopieren</button>
       <button class="a-sheets">An Google Sheet senden</button>
     </div></details>`;
   const leiste = $('#leiste-' + name), a = ansichten[name];
   $('.a-register', leiste).hidden = !MODUS.register;
+  $('.a-werbung', leiste).hidden = !MODUS.werbung;
+  $('.a-werbung', leiste).addEventListener('click', versuche(() => starteWerbung(name)));
   $('.f-sort', leiste).value = a.sortierung;
   $('.f-text', leiste).addEventListener('input', (e) => { a.text = e.target.value; zeichne(name); });
   $('.f-mehr', leiste).addEventListener('click', (e) => { a.filterOffen = !a.filterOffen; e.currentTarget.classList.toggle('aktiv', a.filterOffen); zeichne(name); });
@@ -433,6 +438,7 @@ async function holeStand() {
   zeigeFortschritt(d);
   if (d.leads.length || !$('#tabelle-suche').innerHTML) zeichne('suche');
   if (!d.fertig) abfrageTimer = setTimeout(versuche(holeStand), 1200);
+  else if (MODUS.werbung && !werbungTimer) setTimeout(() => verfolgeWerbung(true).catch(() => {}), 1500);
 }
 
 // ───────── Suche in der Online-Variante ─────────
@@ -983,7 +989,9 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   baueFilterzeile('crm');
   await ladeBranchen();
   await ladeCrm();
-  $('#sheets-url').value = (await api('/api/einstellungen')).sheetsUrl || '';
+  const einst = await api('/api/einstellungen');
+  $('#sheets-url').value = einst.sheetsUrl || '';
+  zeigeMetaStand(einst);
   await zeigeInternetStand();
   zeigeFilterAnzahl();
   ladeKarte();
@@ -992,6 +1000,7 @@ $('#abmelden').addEventListener('click', () => { localStorage.removeItem(PASSWOR
   await holeStand();
   zeichne('suche');
   await verfolgeRegister(true);
+  verfolgeWerbung(true).catch(() => {});
 }))();
 
 // ───────── Assistent ─────────
@@ -1143,3 +1152,60 @@ $('#karte-umschalten').addEventListener('click', () => {
   zeigeKartenspalte(sichtbar);
 });
 if (localStorage.getItem('leadscraper-karte') === 'aus') zeigeKartenspalte(false);
+
+// ───────── Werbung auf Meta (nur lokale Version) ─────────
+function werbungHtml(l) {
+  if (l.werbungMeta === 'ja') {
+    const i = l.werbungMetaInfo || {};
+    const text = 'Wirbt auf Meta' + (i.anzahl ? ` (${i.anzahl} Anzeige${i.anzahl > 1 ? 'n' : ''})` : '');
+    const tipp = 'Geprüft am ' + datumDe(i.geprueftAm) + (i.seiten?.length ? ' · Seite: ' + i.seiten.join(', ') : '');
+    return sichereUrl(i.link) ? `<a class="plakette werbung" href="${esc(i.link)}" target="_blank" rel="noopener noreferrer" title="${esc(tipp)}">${esc(text)}</a>` : `<span class="plakette werbung" title="${esc(tipp)}">${esc(text)}</span>`;
+  }
+  if (l.werbungMeta === 'nein') return `<span class="unter" title="Geprüft am ${esc(datumDe(l.werbungMetaInfo?.geprueftAm))} – keine aktive Anzeige gefunden">Keine Meta-Werbung gefunden</span>`;
+  return '';
+}
+
+let werbungTimer = null;
+async function starteWerbung(name) {
+  const leads = ziel(name);
+  if (!leads.length) return melde('Keine Leads zum Prüfen.');
+  const einst = await api('/api/einstellungen');
+  if (!einst.metaVerbunden) { zeigeReiter('sheets'); return melde('Für die Werbeprüfung bitte zuerst den Meta-Zugang eintragen.', true); }
+  await api('/api/werbung', { quelle: name, ids: leads.map((l) => l.id) });
+  verfolgeWerbung();
+}
+async function verfolgeWerbung(nurWennLaeuft = false) {
+  clearTimeout(werbungTimer);
+  werbungTimer = null;
+  const d = await api('/api/werbung');
+  if (!d.laeuft && nurWennLaeuft) return;
+  melde(d.meldung, !!d.fehler, true);
+  if (d.laeuft) { werbungTimer = setTimeout(versuche(() => verfolgeWerbung()), 2500); return; }
+  await ladeCrm();
+  jobId = null; // Suchergebnisse mit den Prüfergebnissen neu laden
+  await holeStand();
+  hinweisTimer = setTimeout(() => ($('#hinweis').hidden = true), 12000);
+}
+
+function zeigeMetaStand(einst) {
+  if (!MODUS.werbung) return;
+  $('#meta-verbindung').hidden = false;
+  $('#werbung-auto').checked = !!einst.werbungAuto;
+  $('#meta-status').className = 'klein';
+  $('#meta-status').textContent = einst.metaVerbunden ? '✓ Meta-Zugang ist eingerichtet.' : 'Noch kein Meta-Zugang eingetragen.';
+}
+$('#meta-speichern').addEventListener('click', versuche(async () => {
+  const status = $('#meta-status');
+  status.className = 'klein';
+  status.textContent = 'Zugang wird bei Meta getestet …';
+  try {
+    zeigeMetaStand(await api('/api/einstellungen', { metaToken: $('#meta-token').value }));
+    $('#meta-token').value = '';
+    if (!$('#meta-status').textContent.startsWith('✓')) return;
+    status.textContent = '✓ Verbindung zu Meta steht. Leads lassen sich jetzt auf Werbung prüfen.';
+  } catch (e) {
+    status.className = 'klein fehler';
+    status.textContent = e.message;
+  }
+}));
+$('#werbung-auto').addEventListener('change', versuche(async (e) => { await api('/api/einstellungen', { werbungAuto: e.target.checked }); }));

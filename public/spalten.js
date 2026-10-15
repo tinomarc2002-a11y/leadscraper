@@ -58,6 +58,8 @@ const SPALTEN = [
   ['Mitarbeiter (geschätzt)', (l) => l.maZahl || ''],
   ['Was die Firma macht', (l) => l.beschreibung],
   ['Inhaber geprüft', (l) => STATUS_TEXT[l.status] || ''],
+  ['Meta-Werbung', (l) => ({ ja: 'Ja', nein: 'Nicht gefunden' }[l.werbungMeta] || '')],
+  ['Meta-Anzeigen', (l) => l.werbungMetaInfo?.link || ''],
   ['Weitere Geschäftsführer', weiterePersonen],
   ['Stellenseite', (l) => l.karriereUrl],
   ['Impressum', (l) => l.impressumUrl],

@@ -285,3 +285,6 @@ td { padding: 14px 12px; }
 .tabellenrahmen th { position: sticky; top: 0; z-index: 2; background: var(--karte); }
 .aufklapp-knopf { order: 1; margin-left: auto; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--blass); background: none; border: 0; padding: 4px 0; cursor: pointer; }
 .aufklapp-knopf:hover { color: var(--akzent); }
+
+.plakette.werbung { display: inline-block; margin-top: 4px; background: #fdecef; color: #b4234a; text-decoration: none; cursor: pointer; }
+.plakette.werbung:hover { text-decoration: underline; }

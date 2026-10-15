@@ -13,7 +13,7 @@
     <nav class="reiter" role="tablist">
       <button class="aktiv" data-reiter="suche">Suche</button>
       <button data-reiter="crm">CRM <span class="zaehler" id="crm-zaehler">0</span><span class="zaehler faellig" id="crm-faellig" title="Heute fällige Wiedervorlagen" hidden>0</span></button>
-      <button data-reiter="sheets">Google Sheets</button>
+      <button data-reiter="sheets">Verbindungen</button>
       <button data-reiter="datenbank" id="reiter-knopf-datenbank" hidden>Datenbank <span class="zaehler" id="db-zaehler">0</span></button>
     </nav>
     <button type="button" class="neben klein-knopf" id="abmelden" hidden>Abmelden</button>
@@ -166,6 +166,24 @@
         </div>
         <p class="klein" id="sheets-status"></p>
         <p class="klein">Hinweis: Wer die URL kennt, kann Zeilen in diese eine Tabelle schreiben – also nicht weitergeben. Alternativ funktionieren immer „CSV herunterladen“ und „Für Sheets kopieren“ (dann in der Tabelle mit Strg+V einfügen).</p>
+      </div>
+          <div class="karte text" id="meta-verbindung" hidden>
+        <h2>Prüfen, wer auf Facebook und Instagram wirbt</h2>
+        <p>Die Anwendung fragt die öffentliche Werbebibliothek von Meta ab und markiert jede Firma, die gerade Anzeigen schaltet. Das kostet nichts. Meta verlangt dafür einmalig einen eigenen Zugang:</p>
+        <ol>
+          <li>Unter <a href="https://www.facebook.com/ID" target="_blank" rel="noopener">facebook.com/ID</a> die Identität bestätigen (Meta fragt nach einem Ausweis, das dauert meist ein bis zwei Tage).</li>
+          <li>Auf <a href="https://www.facebook.com/ads/library/api" target="_blank" rel="noopener">facebook.com/ads/library/api</a> den Bedingungen zustimmen und auf <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> eine App anlegen (Typ „Sonstiges“ bzw. „Business“).</li>
+          <li>Im <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph-API-Explorer</a> die App wählen und „Generate Access Token“ klicken.</li>
+          <li>Den Schlüssel im <a href="https://developers.facebook.com/tools/debug/accesstoken/" target="_blank" rel="noopener">Access-Token-Debugger</a> einfügen und unten auf „Extend Access Token“ klicken – dann gilt er 60 Tage statt einer Stunde.</li>
+          <li>Den verlängerten Schlüssel hier einfügen:</li>
+        </ol>
+        <div class="zeile">
+          <input type="password" id="meta-token" placeholder="Zugangsschlüssel von Meta" autocomplete="off">
+          <button type="button" class="haupt" id="meta-speichern">Speichern &amp; testen</button>
+        </div>
+        <p class="klein" id="meta-status"></p>
+        <label class="haken"><input type="checkbox" id="werbung-auto"> Nach jeder Suche die Treffer automatisch prüfen</label>
+        <p class="klein">Einzelne Leads prüfst du in der Trefferliste oder im CRM über „Mehr“ → „Meta-Werbung prüfen“. Meta erlaubt nur eine begrenzte Zahl Abfragen pro Stunde; bei vielen Leads pausiert die Prüfung zwischendurch und macht von selbst weiter. „Nicht gefunden“ heißt nicht sicher „wirbt nicht“ – manche Firmen werben über eine Agentur oder unter anderem Namen.</p>
       </div>
     </section>
 

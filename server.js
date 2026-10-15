@@ -156,7 +156,13 @@ function starteSuche(roh) {
   const sicherung = setInterval(() => { if (job === j) schreibe('letzte-suche.json', j); }, 8000);
   laufe(j)
     .catch((e) => { j.fehler = e.message; j.meldung = ''; })
-    .finally(() => { clearInterval(sicherung); j.fertig = true; if (job === j) schreibe('letzte-suche.json', j); });
+    .finally(() => {
+      clearInterval(sicherung); j.fertig = true; if (job === j) schreibe('letzte-suche.json', j);
+      // Auf Wunsch die neuen Treffer gleich auf Meta-Werbung prüfen
+      if (job === j && einstellungen.metaToken && einstellungen.werbungAuto && !werbeLauf.laeuft && j.leads.length) {
+        try { starteWerbepruefung('suche', j.leads.map((l) => l.id), { nurUngeprueft: true }); } catch {}
+      }
+    });
   return j;
 }
 
@@ -191,6 +197,52 @@ function starteRegisterpruefung(quelle, ids) {
   return { gesamt: liste.length, frei: freieSuchen() };
 }
 
+// ───────── Werbung auf Meta prüfen ─────────
+// Läuft im Hintergrund über die ausgewählten Leads. Erreicht Meta sein Abfragelimit, wartet der Lauf und macht
+// danach von selbst weiter. Nach jeder Suche startet er automatisch, wenn das unter „Verbindungen“ eingeschaltet ist.
+const Werbung = require('./lib/werbung');
+const WERBUNG_FRISCH_TAGE = 14; // so lange gilt ein Prüfergebnis
+let werbeLauf = { laeuft: false, gesamt: 0, erledigt: 0, ja: 0, meldung: '', abbruch: false };
+const werbungAktuell = (l) => l.werbungMetaInfo?.geprueftAm && Date.now() - Date.parse(l.werbungMetaInfo.geprueftAm) < WERBUNG_FRISCH_TAGE * 864e5;
+
+function starteWerbepruefung(quelle, ids, { nurUngeprueft = false } = {}) {
+  if (!einstellungen.metaToken) throw new Error('Für die Werbeprüfung fehlt noch der Meta-Zugang – bitte unter „Verbindungen“ eintragen.');
+  if (werbeLauf.laeuft) throw new Error('Die Werbeprüfung läuft bereits.');
+  const liste = (quelle === 'crm' ? crm : job?.leads || []).filter((l) => ids.includes(l.id) && !(nurUngeprueft && werbungAktuell(l)));
+  if (!liste.length) return { gesamt: 0 };
+  const lauf = (werbeLauf = { laeuft: true, gesamt: liste.length, erledigt: 0, ja: 0, meldung: 'Werbeprüfung startet …', abbruch: false });
+  (async () => {
+    for (const lead of liste) {
+      if (lauf.abbruch) break;
+      let ergebnis = null;
+      for (let versuch = 0; !ergebnis && !lauf.abbruch; versuch++) {
+        try {
+          ergebnis = await Werbung.pruefeMeta(lead, einstellungen.metaToken);
+        } catch (e) {
+          if (e.art === 'limit' || (e.art === 'netz' && versuch < 3)) {
+            // Meta lässt nur eine begrenzte Zahl Abfragen pro Stunde zu – warten und weitermachen.
+            const minuten = e.art === 'limit' ? 10 : 1;
+            lauf.meldung = `${e.message} Es geht in ${minuten} Minute${minuten > 1 ? 'n' : ''} automatisch weiter (${lauf.erledigt} von ${lauf.gesamt} geprüft).`;
+            for (let s = 0; s < minuten * 60 && !lauf.abbruch; s++) await new Promise((ja) => setTimeout(ja, 1000));
+          } else { lauf.fehler = e.message; lauf.abbruch = true; }
+        }
+      }
+      if (!ergebnis) break;
+      for (const ziel of [crm.find((l) => l.id === lead.id), job?.leads.find((l) => l.id === lead.id)]) if (ziel) Object.assign(ziel, ergebnis);
+      lauf.erledigt++;
+      if (ergebnis.werbungMeta === 'ja') lauf.ja++;
+      lauf.meldung = `Werbeprüfung: ${lauf.erledigt} von ${lauf.gesamt} geprüft, ${lauf.ja} schalten Meta-Werbung – zuletzt: ${lead.name}`;
+      if (lauf.erledigt % 10 === 0) { if (job) job.stand++; }
+    }
+  })().finally(() => {
+    lauf.laeuft = false;
+    lauf.meldung = lauf.fehler ? 'Werbeprüfung abgebrochen: ' + lauf.fehler : `Werbeprüfung fertig: ${lauf.ja} von ${lauf.erledigt} geprüften Firmen schalten gerade Werbung auf Facebook/Instagram.`;
+    schreibe('crm.json', crm);
+    if (job) { job.stand++; if (job.fertig) schreibe('letzte-suche.json', job); }
+  });
+  return { gesamt: liste.length };
+}
+
 // ───────── HTTP ─────────
 
 const TYPEN = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -207,7 +259,7 @@ function leseKoerper(req) {
 async function api(req, pfad, url) {
   const post = req.method === 'POST';
   const k = post ? await leseKoerper(req) : {};
-  if (pfad === '/api/modus') return { modus: 'lokal', register: true, internet: true };
+  if (pfad === '/api/modus') return { modus: 'lokal', register: true, internet: true, werbung: true };
   if (pfad === '/api/internet' && post) { Internet.richteEin(); return Internet.status(); }
   if (pfad === '/api/internet') return Internet.status();
   if (pfad === '/api/datenbank') {
@@ -234,12 +286,23 @@ async function api(req, pfad, url) {
   if (pfad === '/api/register') return { ...registerLauf, frei: freieSuchen() };
   if (pfad === '/api/register/stop' && post) { registerLauf.abbruch = true; return { ok: true }; }
 
+  // Der Meta-Schlüssel wird nur gespeichert, nie zurückgegeben.
+  const oeffentlich = () => ({ sheetsUrl: einstellungen.sheetsUrl || '', metaVerbunden: !!einstellungen.metaToken, werbungAuto: !!einstellungen.werbungAuto });
   if (pfad === '/api/einstellungen' && post) {
-    einstellungen = { sheetsUrl: String(k.sheetsUrl || '').trim() };
+    if ('sheetsUrl' in k) einstellungen.sheetsUrl = String(k.sheetsUrl || '').trim();
+    if ('werbungAuto' in k) einstellungen.werbungAuto = k.werbungAuto === true;
+    if ('metaToken' in k) {
+      const token = String(k.metaToken || '').trim();
+      if (token) await Werbung.testeZugang(token);
+      einstellungen.metaToken = token;
+    }
     schreibe('einstellungen.json', einstellungen);
-    return einstellungen;
+    return oeffentlich();
   }
-  if (pfad === '/api/einstellungen') return einstellungen;
+  if (pfad === '/api/einstellungen') return oeffentlich();
+  if (pfad === '/api/werbung' && post) return starteWerbepruefung(k.quelle, Array.isArray(k.ids) ? k.ids : []);
+  if (pfad === '/api/werbung') return werbeLauf;
+  if (pfad === '/api/werbung/stop' && post) { werbeLauf.abbruch = true; return { ok: true }; }
   if (pfad === '/api/sheets' && post) return sendeAnSheets(einstellungen.sheetsUrl, Array.isArray(k.leads) ? k.leads : []);
   return null;
 }
