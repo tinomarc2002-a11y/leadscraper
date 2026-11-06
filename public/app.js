@@ -8,6 +8,8 @@ const heute = () => new Date().toLocaleDateString('sv');
 const datumDe = (iso) => (iso ? iso.slice(0, 10).split('-').reverse().join('.') : '');
 
 const CRM_STATUS = ['Neu', 'Kontaktiert', 'Nicht erreicht', 'Termin', 'Angebot', 'Kunde', 'Kein Interesse'];
+// Werbe-Angaben je Kanal (Google, Meta): leer = nicht geprüft, ja = wirbt, frueher = hat früher geworben, nein = nichts gefunden.
+const WERBUNG_OPTIONEN = [['', 'nicht geprüft'], ['ja', 'wirbt'], ['frueher', 'früher'], ['nein', 'nichts gefunden']];
 const KONTAKT_ERGEBNISSE = ['Nicht erreicht', 'Erreicht – Rückruf vereinbart', 'Erreicht – Termin vereinbart', 'Erreicht – kein Interesse', 'E-Mail gesendet', 'Angebot gesendet', 'Notiz'];
 const STATUS_HILFE = {
   register: 'Als Vertretungsberechtigter im amtlichen Handelsregister eingetragen.',
@@ -21,7 +23,7 @@ const RANG = { unbekannt: 0, pruefen: 1, impressum: 2, bestaetigt: 3, register: 
 
 const ansichten = {
   suche: { leads: [], auswahl: new Set(), text: '', status: '', sortierung: 'entfernung', nurFaellig: false },
-  crm: { leads: [], auswahl: new Set(), text: '', status: '', sortierung: 'name', nurFaellig: false },
+  crm: { leads: [], auswahl: new Set(), text: '', status: '', sortierung: 'name', nurFaellig: false, liste: '', google: '', meta: '' },
 };
 let jobId = null, jobStand = 0;
 let abfrageTimer = null;
@@ -81,6 +83,7 @@ function zeigeReiter(name) {
 $$('.reiter button').forEach((b) => b.addEventListener('click', () => zeigeReiter(b.dataset.reiter)));
 
 // ───────── Tabellen ─────────
+const OHNE_LISTE = '__ohne';
 const istFaellig = (l) => !!l.wiedervorlage && l.wiedervorlage <= heute() && !['Kunde', 'Kein Interesse'].includes(l.crmStatus);
 
 function sichtbare(name) {
@@ -90,9 +93,12 @@ function sichtbare(name) {
     if (a.status && (name === 'crm' ? l.crmStatus : l.status) !== a.status) return false;
     if (a.nurFaellig && !istFaellig(l)) return false;
     if (a.branche && l.branche !== a.branche) return false;
+    if (a.liste && (a.liste === OHNE_LISTE ? l.liste : l.liste !== a.liste)) return false;
+    if (a.google && (l.werbungGoogle || '') !== a.google) return false;
+    if (a.meta && (l.werbungMeta || '') !== a.meta) return false;
     if (a.rechtsform && rechtsformGruppe(l.rechtsform) !== a.rechtsform) return false;
     if ((a.mitTelefon && !l.telefon) || (a.mitEmail && !l.email) || (a.mitStellen && !l.karriereUrl) || (a.mitWerbung && l.werbungMeta !== 'ja')) return false;
-    return !suchtext || [l.name, l.inhaber, l.weitere, l.ort, l.plz, l.branche, l.beschreibung, l.notiz].some((w) => String(w || '').toLowerCase().includes(suchtext));
+    return !suchtext || [l.name, l.inhaber, l.weitere, l.ort, l.plz, l.branche, l.beschreibung, l.notiz, l.liste, l.werbeAnsatz].some((w) => String(w || '').toLowerCase().includes(suchtext));
   });
   const vergleich = {
     entfernung: (x, y) => (x.entfernungKm ?? 9999) - (y.entfernungKm ?? 9999),
@@ -122,9 +128,15 @@ function inhaberHtml(l, name) {
     ${!weitere.length && l.weitere ? `<div class="unter">+ ${esc(l.weitere)}</div>` : ''}`;
 }
 
+const werbeWahl = (klasse, wert) => `<select class="${klasse}">${WERBUNG_OPTIONEN.map(([v, t]) => `<option value="${v}"${v === (wert || '') ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
 function crmSpaltenHtml(l) {
   const verlauf = l.verlauf || [];
-  return `<td class="spalte-status"><select class="crm-status" aria-label="Status">${CRM_STATUS.map((s) => `<option${s === l.crmStatus ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
+  const geprueft = (i) => (i?.geprueftAm ? `Geprüft am ${datumDe(i.geprueftAm)}${i.quelle ? ' · ' + i.quelle : ''}` : '');
+  return `<td class="spalte-werbung">
+      <label class="unter" title="${esc(geprueft(l.werbungGoogleInfo))}">Google ${werbeWahl('w-google', l.werbungGoogle)}</label>
+      <label class="unter" title="${esc(geprueft(l.werbungMetaInfo))}">Meta ${werbeWahl('w-meta', l.werbungMeta)}</label>
+      <textarea class="w-ansatz" rows="2" placeholder="Ansatz zur Werbung …" aria-label="Ansatz zur Werbung">${esc(l.werbeAnsatz)}</textarea></td>
+    <td class="spalte-status"><select class="crm-status" aria-label="Status">${CRM_STATUS.map((s) => `<option${s === l.crmStatus ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
       <label class="unter wv${istFaellig(l) ? ' faellig' : ''}">Wiedervorlage<input type="date" class="wiedervorlage" value="${esc(l.wiedervorlage || '')}"></label></td>
     <td class="spalte-notiz"><textarea class="notiz" rows="1" placeholder="Notiz …">${esc(l.notiz)}</textarea>
       <button type="button" class="neben klein-knopf kontakt-neu">+ Kontakt eintragen</button>
@@ -142,7 +154,8 @@ function zeileHtml(l, name) {
   return `<tr data-id="${esc(l.id)}">
     <td class="schmal"><input type="checkbox" class="wahl" ${a.auswahl.has(l.id) ? 'checked' : ''} aria-label="Auswählen"></td>
     <td class="spalte-firma"><div class="firma">${esc(l.name)}${schonImCrm ? '<span class="im-crm">✓ im CRM</span>' : ''}</div>
-      ${werbungHtml(l)}
+      ${werbungHtml(l, name)}${googleHtml(l)}
+      ${name === 'crm' && l.liste && !a.liste ? `<div class="unter">Liste: ${esc(l.liste)}</div>` : ''}
       <div class="unter">${esc(l.branche)}${l.rechtsform ? ' · ' + esc(l.rechtsform) : ''}</div>
       <div class="beschreibung" title="${esc(l.beschreibung)}">${esc(l.beschreibung)}</div></td>
     <td class="spalte-inhaber">${inhaberHtml(l, name)}</td>
@@ -165,12 +178,13 @@ function zeichne(name) {
   $('#filter-' + name).hidden = a.leads.length === 0 || !a.filterOffen;
   $('#tabelle-' + name).innerHTML = !a.leads.length ? '' : `<thead><tr>
       <th class="schmal"><input type="checkbox" class="alle" ${liste.length && liste.every((l) => a.auswahl.has(l.id)) ? 'checked' : ''} aria-label="Alle auswählen"></th>
-      <th>Unternehmen</th><th>Inhaber</th><th>Kontakt</th><th>Standort</th><th>Mitarbeiter</th><th>Prüfen</th>${name === 'crm' ? '<th>Status</th><th>Notiz &amp; Verlauf</th>' : ''}
+      <th>Unternehmen</th><th>Inhaber</th><th>Kontakt</th><th>Standort</th><th>Mitarbeiter</th><th>Prüfen</th>${name === 'crm' ? '<th>Werbung</th><th>Status</th><th>Notiz &amp; Verlauf</th>' : ''}
     </tr></thead><tbody>${liste.map((l) => zeileHtml(l, name)).join('')}</tbody>`;
   const gewaehlt = liste.filter((l) => a.auswahl.has(l.id)).length;
   $('#leiste-' + name + ' .anzahl').textContent = gewaehlt ? `${gewaehlt} von ${liste.length} ausgewählt` : `${liste.length} Leads`;
   if (name === 'suche') zeichnePins();
   if (name === 'crm') {
+    aktualisiereListen();
     const faellig = a.leads.filter(istFaellig).length;
     $('#crm-zaehler').textContent = a.leads.length;
     $('#crm-faellig').textContent = faellig;
@@ -191,10 +205,14 @@ function baueFilterzeile(name) {
     <button type="button" class="neben umschalter" data-feld="mitTelefon">mit Telefon</button>
     <button type="button" class="neben umschalter" data-feld="mitEmail">mit E-Mail</button>
     <button type="button" class="neben umschalter" data-feld="mitStellen">mit Stellenseite</button>
-    ${MODUS.werbung ? '<button type="button" class="neben umschalter" data-feld="mitWerbung">wirbt auf Meta</button>' : ''}`;
+    ${MODUS.werbung ? '<button type="button" class="neben umschalter" data-feld="mitWerbung">wirbt auf Meta</button>' : ''}
+    ${name === 'crm' ? `<select class="f-google" aria-label="Google-Werbung"><option value="">Google: alle</option>${WERBUNG_OPTIONEN.filter(([v]) => v).map(([v, t]) => `<option value="${v}">Google: ${esc(t)}</option>`).join('')}</select>
+    <select class="f-meta" aria-label="Meta-Werbung"><option value="">Meta: alle</option>${WERBUNG_OPTIONEN.filter(([v]) => v).map(([v, t]) => `<option value="${v}">Meta: ${esc(t)}</option>`).join('')}</select>` : ''}`;
   $('.f-status', zeile).addEventListener('change', (e) => { a.status = e.target.value; zeichne(name); });
   $('.f-branche', zeile).addEventListener('change', (e) => { a.branche = e.target.value; zeichne(name); });
   $('.f-rechtsform', zeile).addEventListener('change', (e) => { a.rechtsform = e.target.value; zeichne(name); });
+  $('.f-google', zeile)?.addEventListener('change', (e) => { a.google = e.target.value; zeichne(name); });
+  $('.f-meta', zeile)?.addEventListener('change', (e) => { a.meta = e.target.value; zeichne(name); });
   $$('.umschalter', zeile).forEach((k) => k.addEventListener('click', () => {
     a[k.dataset.feld] = !a[k.dataset.feld];
     k.classList.toggle('aktiv', a[k.dataset.feld]);
@@ -223,13 +241,15 @@ function baueLeiste(name) {
       <option value="entfernung">Nach Entfernung</option><option value="name">Nach Name</option>
       <option value="sicherheit">Nach Sicherheit</option><option value="mitarbeiter">Nach Größe</option>
       ${name === 'crm' ? '<option value="wiedervorlage">Nach Wiedervorlage</option>' : ''}</select>
+    ${name === 'crm' ? '<select class="f-liste" aria-label="Liste"></select>' : ''}
     <button type="button" class="neben f-mehr">Eingrenzen</button>
     ${name === 'crm' ? '<button class="neben f-faellig"></button>' : ''}
     <span class="abstand"></span>
-    ${name === 'suche' ? '<button class="haupt a-crm">Ins CRM übernehmen</button>' : '<button class="neben gefahr a-loeschen">Löschen</button>'}
+    ${name === 'suche' ? '<input type="text" class="f-liste-neu" list="listen-vorschlaege" placeholder="Liste (optional)" aria-label="Liste für die neuen CRM-Einträge" maxlength="80" autocomplete="off"><button class="haupt a-crm">Ins CRM übernehmen</button>' : '<button class="neben gefahr a-loeschen">Löschen</button>'}
     <details class="menue"><summary class="neben">Mehr</summary><div class="menue-liste">
       <button class="a-register" title="Gleicht die Inhaber mit dem amtlichen Handelsregister ab (max. ca. 25 Firmen pro Stunde)">Im Handelsregister prüfen</button>
       <button class="a-werbung">Meta-Werbung prüfen</button>
+      ${name === 'crm' ? '<button class="a-liste" title="Die angehakten (sonst alle sichtbaren) Leads in eine Liste legen">In Liste verschieben …</button>' : ''}
       <button class="a-csv">CSV herunterladen</button>
       <button class="a-kopieren">Für Sheets kopieren</button>
       <button class="a-sheets">An Google Sheet senden</button>
@@ -239,6 +259,19 @@ function baueLeiste(name) {
   $('.a-werbung', leiste).hidden = !MODUS.werbung;
   $('.a-werbung', leiste).addEventListener('click', versuche(() => starteWerbung(name)));
   $('.f-sort', leiste).value = a.sortierung;
+  $('.f-liste', leiste)?.addEventListener('change', (e) => { a.liste = e.target.value; zeichne(name); });
+  $('.a-liste', leiste)?.addEventListener('click', versuche(async () => {
+    const leads = ziel('crm');
+    if (!leads.length) return melde('Keine Leads zum Verschieben.');
+    const vorschlag = a.liste && a.liste !== OHNE_LISTE ? a.liste : '';
+    const eingabe = prompt(`${leads.length} Lead(s) in welche Liste legen?\nEinen neuen Namen eintippen, um eine neue Liste anzulegen. Leer lassen, um sie aus ihrer Liste zu nehmen.\n\nVorhanden: ${listenNamen().join(', ') || 'noch keine'}`, vorschlag);
+    if (eingabe === null) return;
+    const d = await api('/api/crm/liste', { ids: leads.map((l) => l.id), liste: eingabe });
+    await ladeCrm();
+    if (d.liste) a.liste = d.liste;
+    zeichne('crm');
+    melde(`${d.verschoben} Lead(s) ${d.liste ? 'in „' + d.liste + '“ gelegt' : 'aus ihrer Liste genommen'}.`);
+  }));
   $('.f-text', leiste).addEventListener('input', (e) => { a.text = e.target.value; zeichne(name); });
   $('.f-mehr', leiste).addEventListener('click', (e) => { a.filterOffen = !a.filterOffen; e.currentTarget.classList.toggle('aktiv', a.filterOffen); zeichne(name); });
   // Ein Klick auf einen Menüpunkt (oder daneben) schließt das Menü wieder.
@@ -251,10 +284,11 @@ function baueLeiste(name) {
   $('.a-sheets', leiste).addEventListener('click', versuche((e) => sendeAnSheets(ziel(name), e.currentTarget)));
   $('.a-register', leiste).addEventListener('click', versuche(() => starteRegister(name)));
   $('.a-crm', leiste)?.addEventListener('click', versuche(async () => {
-    const d = await api('/api/crm', { leads: ziel('suche') });
+    const liste = ($('.f-liste-neu', leiste)?.value || '').trim();
+    const d = await api('/api/crm', { leads: ziel('suche'), liste });
     await ladeCrm();
     zeichne('suche');
-    melde(`${d.neu} neue Leads im CRM gespeichert` + (d.vorhanden ? `, ${d.vorhanden} waren schon vorhanden` : '') + ` (${d.gesamt} insgesamt).`);
+    melde(`${d.neu} neue Leads im CRM gespeichert` + (liste ? ` (Liste „${liste}“)` : '') + (d.vorhanden ? `, ${d.vorhanden} waren schon vorhanden` : '') + ` (${d.gesamt} insgesamt).`);
   }));
   $('.a-loeschen', leiste)?.addEventListener('click', versuche(async () => {
     const ids = sichtbare('crm').filter((l) => a.auswahl.has(l.id)).map((l) => l.id);
@@ -272,11 +306,11 @@ function baueLeiste(name) {
     const id = e.target.closest('tr')?.dataset.id;
     if (e.target.matches('.alle')) { sichtbare(name).forEach((l) => (e.target.checked ? a.auswahl.add(l.id) : a.auswahl.delete(l.id))); zeichne(name); }
     else if (e.target.matches('.wahl')) { e.target.checked ? a.auswahl.add(id) : a.auswahl.delete(id); zeichne(name); }
-    else if (e.target.matches('.crm-status, .notiz, .wiedervorlage')) {
-      const feld = e.target.matches('.notiz') ? 'notiz' : e.target.matches('.wiedervorlage') ? 'wiedervorlage' : 'crmStatus';
+    else if (e.target.matches('.crm-status, .notiz, .wiedervorlage, .w-google, .w-meta, .w-ansatz')) {
+      const feld = { notiz: 'notiz', wiedervorlage: 'wiedervorlage', 'w-google': 'werbungGoogle', 'w-meta': 'werbungMeta', 'w-ansatz': 'werbeAnsatz' }[[...e.target.classList].find((c) => ['notiz', 'wiedervorlage', 'w-google', 'w-meta', 'w-ansatz'].includes(c))] || 'crmStatus';
       ersetze(await api('/api/crm/aendern', { id, [feld]: e.target.value }));
-      // Notizen nicht neu zeichnen – sonst springt der Cursor beim Weitertippen aus dem Feld.
-      if (feld !== 'notiz') zeichne(name);
+      // Textfelder nicht neu zeichnen – sonst springt der Cursor beim Weitertippen aus dem Feld.
+      if (feld !== 'notiz' && feld !== 'werbeAnsatz') zeichne(name);
     }
   }));
   tabelle.addEventListener('click', versuche(async (e) => {
@@ -880,7 +914,47 @@ function zeichnePins() {
 async function ladeCrm() {
   ansichten.crm.leads = await api('/api/crm');
   zeichne('crm');
+  await ladeImporte().catch(() => {});
 }
+
+// ───────── Listen im CRM ─────────
+const listenNamen = () => [...new Set(ansichten.crm.leads.map((l) => l.liste).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'de'));
+// Auswahl „Liste“ im CRM und die Vorschläge fürs Listenfeld der Suche aus den vorhandenen Listen aufbauen.
+function aktualisiereListen() {
+  const a = ansichten.crm, namen = listenNamen();
+  const ohne = a.leads.filter((l) => !l.liste).length;
+  if (a.liste && a.liste !== OHNE_LISTE && !namen.includes(a.liste)) a.liste = '';
+  if (a.liste === OHNE_LISTE && !ohne) a.liste = '';
+  const wahl = $('#leiste-crm .f-liste');
+  if (wahl) {
+    const optionen = [`<option value="">Alle Listen (${a.leads.length})</option>`, ...namen.map((n) => `<option value="${esc(n)}">${esc(n)} (${a.leads.filter((l) => l.liste === n).length})</option>`)];
+    if (namen.length && ohne) optionen.push(`<option value="${OHNE_LISTE}">Ohne Liste (${ohne})</option>`);
+    const neu = optionen.join('');
+    if (wahl.dataset.stand !== neu) { wahl.innerHTML = neu; wahl.dataset.stand = neu; }
+    wahl.value = a.liste;
+    wahl.hidden = !namen.length;
+  }
+  $('#listen-vorschlaege').innerHTML = namen.map((n) => `<option value="${esc(n)}"></option>`).join('');
+}
+
+// Vorbereitete Listen, die sich mit einem Klick ins CRM übernehmen lassen (solange noch keiner davon im CRM liegt).
+async function ladeImporte() {
+  const kasten = $('#import-hinweis');
+  const offen = (await api('/api/crm/importe')).filter((b) => !b.imCrm);
+  kasten.hidden = !offen.length;
+  kasten.innerHTML = offen.map((b) => `<div class="import-zeile"><div><strong>${esc(b.name)}</strong> · ${b.anzahl} Leads bereit<div class="unter">${esc(b.beschreibung)}</div></div><button type="button" class="haupt" data-import="${esc(b.id)}">Ins CRM übernehmen</button></div>`).join('');
+}
+$('#import-hinweis').addEventListener('click', versuche(async (e) => {
+  const knopf = e.target.closest('[data-import]');
+  if (!knopf) return;
+  knopf.disabled = true;
+  try {
+    const d = await api('/api/crm/import', { id: knopf.dataset.import });
+    ansichten.crm.liste = d.liste;
+    await ladeCrm();
+    melde(`${d.neu} Leads in die Liste „${d.liste}“ übernommen` + (d.vorhanden ? `, ${d.vorhanden} waren schon im CRM (ergänzt, nichts überschrieben)` : '') + ` (${d.gesamt} im CRM insgesamt).`, false, true);
+  } finally { knopf.disabled = false; }
+}));
 
 const APPS_SCRIPT = `function doPost(e) {
   var daten = JSON.parse(e.postData.contents);
@@ -1154,14 +1228,23 @@ $('#karte-umschalten').addEventListener('click', () => {
 if (localStorage.getItem('leadscraper-karte') === 'aus') zeigeKartenspalte(false);
 
 // ───────── Werbung auf Meta (nur lokale Version) ─────────
-function werbungHtml(l) {
+function werbungHtml(l, name) {
   if (l.werbungMeta === 'ja') {
     const i = l.werbungMetaInfo || {};
     const text = 'Wirbt auf Meta' + (i.anzahl ? ` (${i.anzahl} Anzeige${i.anzahl > 1 ? 'n' : ''})` : '');
     const tipp = 'Geprüft am ' + datumDe(i.geprueftAm) + (i.seiten?.length ? ' · Seite: ' + i.seiten.join(', ') : '');
     return sichereUrl(i.link) ? `<a class="plakette werbung" href="${esc(i.link)}" target="_blank" rel="noopener noreferrer" title="${esc(tipp)}">${esc(text)}</a>` : `<span class="plakette werbung" title="${esc(tipp)}">${esc(text)}</span>`;
   }
-  if (l.werbungMeta === 'nein') return `<span class="unter" title="Geprüft am ${esc(datumDe(l.werbungMetaInfo?.geprueftAm))} – keine aktive Anzeige gefunden">Keine Meta-Werbung gefunden</span>`;
+  if (l.werbungMeta === 'frueher') return `<span class="plakette frueher" title="${esc('Hat früher Meta-Anzeigen geschaltet, aktuell keine gefunden. ' + (l.werbungMetaInfo?.geprueftAm ? 'Geprüft am ' + datumDe(l.werbungMetaInfo.geprueftAm) : ''))}">Früher Meta-Anzeigen</span>`;
+  // Im CRM steht „nichts gefunden“ schon im Auswahlfeld der Werbe-Spalte.
+  if (l.werbungMeta === 'nein' && name !== 'crm') return `<span class="unter" title="Geprüft am ${esc(datumDe(l.werbungMetaInfo?.geprueftAm))} – keine aktive Anzeige gefunden">Keine Meta-Werbung gefunden</span>`;
+  return '';
+}
+
+function googleHtml(l) {
+  const tipp = (l.werbungGoogleInfo?.geprueftAm ? 'Geprüft am ' + datumDe(l.werbungGoogleInfo.geprueftAm) + (l.werbungGoogleInfo.quelle ? ' · ' + l.werbungGoogleInfo.quelle : '') : '');
+  if (l.werbungGoogle === 'ja') return `<span class="plakette google" title="${esc(tipp)}">Wirbt auf Google</span>`;
+  if (l.werbungGoogle === 'frueher') return `<span class="plakette frueher" title="${esc(tipp)}">Früher Google-Anzeigen</span>`;
   return '';
 }
 

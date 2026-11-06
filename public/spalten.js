@@ -1,5 +1,7 @@
 // Spalten für CSV, Zwischenablage und Google Sheets sowie die Einteilung der Rechtsformen –
 // wird von Browser und Server gemeinsam benutzt.
+// Werbe-Angaben je Kanal (Google, Meta) in Klartext für Tabellen und Export.
+const WERBUNG_TEXT = { ja: 'Ja', frueher: 'Früher', nein: 'Nicht gefunden' };
 const STATUS_TEXT = { register: 'Im Handelsregister bestätigt', bestaetigt: 'Doppelt bestätigt', impressum: 'Laut Impressum', pruefen: 'Bitte prüfen', unbekannt: 'Nicht gefunden' };
 
 // Rechtsformen, nach denen sich filtern lässt. Wer im Impressum keinen Rechtsformzusatz führt,
@@ -58,7 +60,7 @@ const SPALTEN = [
   ['Mitarbeiter (geschätzt)', (l) => l.maZahl || ''],
   ['Was die Firma macht', (l) => l.beschreibung],
   ['Inhaber geprüft', (l) => STATUS_TEXT[l.status] || ''],
-  ['Meta-Werbung', (l) => ({ ja: 'Ja', nein: 'Nicht gefunden' }[l.werbungMeta] || '')],
+  ['Meta-Werbung', (l) => WERBUNG_TEXT[l.werbungMeta] || ''],
   ['Meta-Anzeigen', (l) => l.werbungMetaInfo?.link || ''],
   ['Weitere Geschäftsführer', weiterePersonen],
   ['Stellenseite', (l) => l.karriereUrl],
@@ -68,6 +70,10 @@ const SPALTEN = [
   ['Letzter Kontakt', letzterKontakt],
   ['Notiz', (l) => l.notiz],
   ['Erfasst am', (l) => l.erfasstAm],
+  // Neue Spalten stehen bewusst hinten, damit bereits angelegte Google-Tabellen ausgerichtet bleiben.
+  ['Liste', (l) => l.liste],
+  ['Google-Werbung', (l) => WERBUNG_TEXT[l.werbungGoogle] || ''],
+  ['Werbe-Ansatz', (l) => l.werbeAnsatz],
 ];
 
 const zeileAus = (lead) => SPALTEN.map(([, hole]) => { const w = hole(lead); return w == null ? '' : String(w); });

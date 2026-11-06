@@ -4,7 +4,8 @@
   "private": true,
   "description": "Geprüfte Firmen-Leads mit Inhaber aus dem Impressum – lokal per start.bat oder online auf Vercel",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=22"

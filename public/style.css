@@ -288,3 +288,17 @@ td { padding: 14px 12px; }
 
 .plakette.werbung { display: inline-block; margin-top: 4px; background: #fdecef; color: #b4234a; text-decoration: none; cursor: pointer; }
 .plakette.werbung:hover { text-decoration: underline; }
+
+/* Listen und Werbe-Angaben im CRM */
+.spalte-werbung { min-width: 190px; }
+.spalte-werbung label { display: block; font-weight: 500; margin: 0 0 5px; }
+.spalte-werbung select { display: block; margin-top: 2px; padding: 4px 6px; font-size: 13px; }
+.spalte-werbung textarea { margin-top: 2px; padding: 5px 7px; font-size: 12.5px; resize: vertical; }
+.plakette.google { background: var(--blau-hell); color: var(--blau); cursor: default; margin-left: 4px; }
+.plakette.frueher { background: var(--gelb-hell); color: var(--gelb); margin-left: 4px; }
+.leiste .f-liste { width: auto; min-width: 190px; max-width: 280px; margin-top: 0; font-weight: 600; }
+.leiste .f-liste-neu { width: 170px; margin-top: 0; }
+.import-hinweis { border-color: var(--akzent); background: var(--akzent-hell); padding: 12px 16px; }
+.import-zeile { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.import-zeile + .import-zeile { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rand); }
+.import-zeile > div { flex: 1 1 360px; min-width: 0; }
