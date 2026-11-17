@@ -25,9 +25,18 @@ Regeln:
 
 Zusätzlich, falls relevant, eine Zeile `Offen:` mit dem, was nicht geprüft werden konnte.
 
+## Über Marc und seine Arbeit
+
+Kontext, Angebot, Zielgruppe, Kampagnenregeln und Ton: `.agents/product-marketing.md`. Vor Marketingarbeit lesen.
+- High-Ticket (mind. 1.000 € Profit pro Kunde), Branchen Heilberufe und Handwerk, Entscheider ist der Inhaber.
+- Texte: keine KI-Floskeln, keine Gedankenstriche, keine übertriebenen Versprechen. Anrede je nach Kanal.
+- Meta nur Facebook/Instagram, nie Audience Network. Google Ads immer mit Landingpage.
+- Antworten kurz, Ergebnis zuerst, Belege nennen.
+- Nachrichten an Dritte (Mails, Einladungen) nie ohne vorherige Freigabe senden. Andere Aktionen nach Auftrag ohne Rückfrage.
+
 ## Sicherheit und Sorgfalt
 
-- Vor jedem Schreibzugriff auf ein Werbekonto (Meta, Google): Änderung als Vorschau nennen, dann erst ausführen. Aktivieren, Pausieren, Budget nur auf ausdrückliche Anweisung.
+- Vor jedem Schreibzugriff auf ein Werbekonto (Meta, Google): Änderung als Vorschau nennen und dann ausführen, ohne Rückfrage, wenn Marc sie beauftragt hat. Von sich aus ändern: nie.
 - Fremde Skills werden vor der Installation gelesen: nur MIT/Apache, keine versteckten Server-Einträge (`.mcp.json`), kein Netzwerkzugriff außer zu dokumentierten Schnittstellen.
 - Keine privaten Daten (Name, E-Mail, Kunden) in Anfragen an externe Dienste.
 - Keine Pull Requests ohne ausdrückliche Bitte.

@@ -9,3 +9,4 @@ data
 # und die Online-Schnittstelle in api/index.js übergehen.
 server.js
 start.bat
+.agents
