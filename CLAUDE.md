@@ -34,6 +34,16 @@ Kontext, Angebot, Zielgruppe, Kampagnenregeln und Ton: `.agents/product-marketin
 - Antworten kurz, Ergebnis zuerst, Belege nennen.
 - Nachrichten an Dritte (Mails, Einladungen) nie ohne vorherige Freigabe senden. Andere Aktionen nach Auftrag ohne Rückfrage.
 
+## Standard-Arbeitsweise bei Weboberflächen (gilt für jede Aufgabe)
+
+Marc will das nie wieder erklären müssen. Jede Anweisung läuft nach diesem Schema:
+
+1. **Direkter Konnektor zuerst.** Gibt es ein Werkzeug für das System (Meta-MCP, Google Drive, Gmail, Notion, Zapier-Konnektor, wenn verbunden), nutze es.
+2. **Sonst Chrome.** Für alles andere (Zapier, Meta-Oberfläche, Leads-Center, Business-Einstellungen, Vercel, Websites, Dashboards) nutze die Chrome-Erweiterung (`mcp__claude-in-chrome__*`, vorher den Skill `anthropic-skills:chrome-browser` lesen) und öffne die Seiten selbst. Nicht erst eine Anleitung zum Selbermachen liefern.
+3. **Login und Freigabe.** Wo Marc sich einloggen oder etwas bestätigen muss (Passwort, 2FA, CAPTCHA, Berechtigungsdialog), sage ich kurz genau, was er tun soll, und warte. Danach arbeite ich selbstständig weiter, ohne neue Erklärung.
+4. **Ist kein Computer verbunden,** sage ich das in einem Satz (Chrome-Werkzeuge fehlen), rufe `list_computer_folders` auf und fordere den Ordner mit `request_computer_folder` an. Erst wenn das scheitert, gebe ich eine Anleitung, und sage klar, was blockiert ist.
+5. **Grenzen bleiben:** Nachrichten an Dritte nur nach Freigabe. Keine Umgehung von Bot-Schutz oder Nutzungsbedingungen, kein Massen-Scraping. Änderungen an Live-Systemen mit Vorschau, wie oben beschrieben.
+
 ## Sicherheit und Sorgfalt
 
 - Vor jedem Schreibzugriff auf ein Werbekonto (Meta, Google): Änderung als Vorschau nennen und dann ausführen, ohne Rückfrage, wenn Marc sie beauftragt hat. Von sich aus ändern: nie.
