@@ -44,6 +44,14 @@ Marc will das nie wieder erklären müssen. Jede Anweisung läuft nach diesem Sc
 4. **Ist kein Computer verbunden,** sage ich das in einem Satz (Chrome-Werkzeuge fehlen), rufe `list_computer_folders` auf und fordere den Ordner mit `request_computer_folder` an. Erst wenn das scheitert, gebe ich eine Anleitung, und sage klar, was blockiert ist.
 5. **Grenzen bleiben:** Nachrichten an Dritte nur nach Freigabe. Keine Umgehung von Bot-Schutz oder Nutzungsbedingungen, kein Massen-Scraping. Änderungen an Live-Systemen mit Vorschau, wie oben beschrieben.
 
+## Lead-Benachrichtigungen (Standard für jede Kampagne)
+
+Gilt für eigene, Kunden- und Recruiting-Kampagnen. Vorlage und Ablauf: `.agents/vorlagen/lead-mail/README.md`.
+- Mail nur mit Fakten: Datum, Uhrzeit, Name, Telefon, E-Mail, Formularantworten. Keine Angaben zu Anzeige, Kampagne oder Formular.
+- Minimalistisch, viel Symbole, drei Buttons nebeneinander (Anrufen, WhatsApp, E-Mail), kompakt, ohne langes Scrollen.
+- Jeder neue Lead landet zusätzlich im Google Sheet "Stand jetzt" der Kampagne (Status-Dropdown).
+- Neue Kampagne: Workflow aus der Vorlage anlegen, testen, Testdaten wieder löschen. Empfänger außerhalb von Marc nur nach Freigabe.
+
 ## Sicherheit und Sorgfalt
 
 - Vor jedem Schreibzugriff auf ein Werbekonto (Meta, Google): Änderung als Vorschau nennen und dann ausführen, ohne Rückfrage, wenn Marc sie beauftragt hat. Von sich aus ändern: nie.
