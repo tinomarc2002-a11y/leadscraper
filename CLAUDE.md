@@ -52,6 +52,10 @@ Gilt für eigene, Kunden- und Recruiting-Kampagnen. Vorlage und Ablauf: `.agents
 - Jeder neue Lead landet zusätzlich im Google Sheet "Stand jetzt" der Kampagne (Status-Dropdown).
 - Neue Kampagne: Workflow aus der Vorlage anlegen, testen, Testdaten wieder löschen. Empfänger außerhalb von Marc nur nach Freigabe.
 
+## Gespeichertes Wissen
+
+Notizen aus Calls und Recherchen liegen unter `.agents/wissen/` (z. B. `webinare-boris-2026-11-25.md`). Vor Arbeit zu einem Thema dort nachsehen.
+
 ## Sicherheit und Sorgfalt
 
 - Vor jedem Schreibzugriff auf ein Werbekonto (Meta, Google): Änderung als Vorschau nennen und dann ausführen, ohne Rückfrage, wenn Marc sie beauftragt hat. Von sich aus ändern: nie.
